@@ -17,7 +17,7 @@
 | --- | --- |
 | [docs/README.md](docs/README.md) | Контракты v1 и приоритет решений |
 | [docs/14-core-development-plan.md](docs/14-core-development-plan.md) | Порядок исполнения и пять детальных планов |
-| [docs/work/tasks.md](docs/work/tasks.md) | Текущие статусы 43 задач |
+| [docs/work/tasks.md](docs/work/tasks.md) | Текущие статусы 44 задач |
 | [docs/work/journal/](docs/work/journal/README.md) | Очищенная история работы по дням |
 | [artifacts/README.md](artifacts/README.md) | Локальные evidence runs, формат и хранение |
 | [AGENTS.md](AGENTS.md) | Инструкции работы для следующих агентов |

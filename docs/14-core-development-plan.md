@@ -8,16 +8,16 @@
 
 Обязательный минимум контента — пять CMS (Sanity, Contentful, Strapi, Payload, Directus) и три сравнения; расширение до восьми/пяти только при готовой редактуре. AI-review ручной, три сигнала и прозрачная методология обязательны. Не добавляем переводы, A/B, newsletter/DOI/автописьма, общий рейтинг, универсальный builder, ledger/receipts/pointers/resume, публичный data API и пустые модули будущих функций.
 
-Источник требований — [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md) и [спецификации 02–12](README.md). Этот пакет задаёт работу, зависимости и доказательства; поля/формулы/HTTP/retention остаются в исходных контрактах. Если реальная интеграция требует изменения контракта, оформить следующий ADR и обновить связанные документы вместе с планом.
+Источник требований — [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md), [ADR 0014](decisions/0014-learning-project-simplifications.md) и [спецификации 02–12](README.md). Этот пакет задаёт работу, зависимости и доказательства; поля/формулы/HTTP/retention остаются в исходных контрактах. Если реальная интеграция требует изменения контракта, оформить следующий ADR и обновить связанные документы вместе с планом.
 
 ## 2. Пакет детальных планов
 
 | План | Задачи и ответственность |
 | --- | --- |
 | [01 Основание](plans/01-foundation.md) | FP: bootstrap, конфигурация/fixtures, SQL-права, dev targets, интеграционный прототип |
-| [02 CMS и публичный web](plans/02-content-and-public-web.md) | CW: модель, Studio, readiness, preview/cache, UI/SEO и редакционный контент |
-| [03 Данные и collector](plans/03-data-and-collector.md) | DP: mapping, seed, snapshots, adapters, AI ingestion, fallback/cleanup |
-| [04 Заявки и измерение](plans/04-leads-consent-and-measurement.md) | LM: private state, Brevo, форма, consent, события/атрибуция/воронка |
+| [02 CMS и публичный web](plans/02-content-and-public-web.md) | CW: модель, Studio, readiness, preview/cache, визуальная система, UI/SEO и редакционный контент |
+| [03 Данные и collector](plans/03-data-and-collector.md) | DP: mapping, seed, текущие метрики, adapters, чтение AI-review, fallback, ежедневный запуск |
+| [04 Заявки и измерение](plans/04-leads-consent-and-measurement.md) | LM: заявки без email, Brevo, форма, consent, события/атрибуция/воронка |
 | [05 Качество и выпуск](plans/05-quality-operations-and-release.md) | QA: CI/evidence, приёмка, доступность/performance, restore/operations, production и кейс |
 
 Для каждой задачи задан результат, входы/зависимости, шаги, артефакты и проверяемый DoD. Предложенные code paths не являются уже существующим кодом. Идентификатор задачи — устойчивый ключ для issue/PR/evidence; название можно уточнять без смены ID. Новые нормативные решения в issue не прятать.
@@ -34,7 +34,7 @@
 
 Маркетинговый путь входит в M1. Нельзя ждать завершения всего каталога или коллектора, чтобы впервые проверить форму и аналитику. Разные потоки M1 интегрируются на одном fixture/live dev наборе, а не остаются тремя несвязанными демо.
 
-Конкретный состав M1: CW-01–CW-07, минимальные DP-01–DP-07, LM-01–LM-08, dev targets FP-04 и объединение FP-05. CW-12 даёт минимальный методологический UI уже в прототипе, его полный DoD закрывается в M2. M2 доводит CW-08–CW-15, DP-08 и LM-09, а также неполные v1 критерии прототипных задач. Во всём пакете **43 задачи**: 5 FP, 15 CW, 8 DP, 9 LM и 6 QA.
+Конкретный состав M1: CW-01–CW-07, минимальные DP-01–DP-07, LM-01–LM-08, dev targets FP-04 и объединение FP-05. CW-16 (визуальная система и макеты) идёт параллельно M1 и должна быть закрыта до CW-08. CW-12 даёт минимальный методологический UI уже в прототипе, его полный DoD закрывается в M2. M2 доводит CW-08–CW-15, DP-08 и LM-09, а также неполные v1 критерии прототипных задач. Во всём пакете **44 задачи**: 5 FP, 16 CW, 8 DP, 9 LM и 6 QA.
 
 Критическая цепочка: FP-01 → FP-02 → FP-03 + первые схемы → FP-04 → FP-05 → доведение/приёмка → restore и production gates → выпуск. Подготовка Studio/UI, источников и lead/consent после общих interfaces может идти одновременно. Live smoke по общему dev namespace выполняется последовательно, чтобы не менять seed конкурентно.
 
@@ -45,18 +45,20 @@ FP-03 сначала предоставляет migration runner/connections/п�
 | Граница | Производитель → потребитель | Что согласовать до интеграции |
 | --- | --- | --- |
 | CMS entity/content | CW → DP/public UI | Stable published IDs, mapping projection, readiness; common entity публикуется до locale content без цикла prerequisites |
-| Mapping/AI | CW/Studio ↔ DP → CW/UI | Один алгоритм semantic mappingKey; published aiReview revision и evidence dates; pending/mapping_changed не превращаются в новый score |
-| Snapshot read model | DP → CW | Последняя попытка, last-valid по источникам, полный AI отдельно; mapping/version/status/date/null/0; no data и SQL failure различимы |
+| Mapping/AI | CW/Studio ↔ DP → CW/UI | Один алгоритм semantic mappingKey; read layer читает опубликованный aiReview из Sanity; mapping_changed и неполный review не дают score |
+| Metrics read model | DP → CW | Последняя попытка и last-valid по источникам, ряд загрузок по дням; mapping/status/date/null/0; no data и SQL failure различимы |
 | Cache | CW handlers ↔ DP CLI | Environment/product allowlist, отдельный import secret, webhook signature, server-computed tags, idempotent invalidation и TTL fallback |
-| Lead accepted | LM/server → LM/UI/measurement | Accepted только CRM success и сохранённый state; conversionId отличается от request credential; чужой duplicate/honeypot analyticsEligible=false |
+| Lead accepted | LM/server → LM/UI/measurement | Accepted только после CRM success; conversionId отличается от request credential; чужой duplicate/honeypot analyticsEligible = false |
 | UI events | CW/LM UI → LM measurement | Stable IDs, routeType/entryPoint enum; raw URL/query/referrer/form values не передавать |
-| Operations | DP/LM → QA | Один migration history, раздельные роли, dry-run/production guard, snapshot lock и отдельная lead lease, safe reports/backup |
+| Operations | DP/LM → QA | Один migration history, раздельные роли, dry-run/production guard, collector lock, ежедневный запуск через Vercel Cron, safe reports, CMS export |
 
 Сначала оформить минимальные TypeScript интерфейсы и fixtures, затем подключить producers/consumers, затем провести реальный smoke. Общие утилиты ID/UTC/validation не копировать между потоками. Любое изменение интерфейса сопровождается обновлением consumer и сценария проверки в той же интеграционной задаче.
 
 ## 5. Как вести исполнение
 
-Локальный [board](work/tasks.md) по ID из пакета создан; ведение run/evidence и журнала — по [рабочему процессу](work/README.md). Состояния `planned → in_progress → review → verified`, при препятствии `blocked` с конкретной причиной/следующим действием. Сейчас все 43 задачи `planned`: подготовка репозитория не закрывает FP-01. При подключении remote issues переносить те же ID, не создавать независимые противоречивые статусы. Область ответственности назначается исполнителю при старте задачи; автор не заменяет независимую проверку критического поведения.
+Локальный [board](work/tasks.md) по ID из пакета создан; ведение run/evidence и журнала — по [рабочему процессу](work/README.md). Состояния `planned → in_progress → review → verified`, при препятствии `blocked` с конкретной причиной/следующим действием. Сейчас все 44 задачи `planned`: подготовка репозитория не закрывает FP-01. При подключении remote issues переносить те же ID, не создавать независимые противоречивые статусы. Область ответственности назначается исполнителю при старте задачи; автор не заменяет независимую проверку критического поведения.
+
+Evidence-файлы в run обязательны только для проверок, привязанных к Q-гейту (`--gate Qxx`); для остальных задач достаточно записей `check` с командой и результатом. Это учебный проект: процесс не должен стоить дороже кода.
 
 Каждый PR содержит цель задачи, связанный контракт, изменённое поведение, проверки и ограничения. Объём PR — одна проверяемая функциональная часть; нельзя объявить задачу verified только по наличию файлов. Domain/DB/handler tests появляются с функциями; live account/API checks записываются отдельно от mock CI. Критические failures из Q05/Q09/Q13–Q17 устраняются до расширения контента.
 
@@ -71,10 +73,11 @@ FP-03 сначала предоставляет migration runner/connections/п�
 | Несовместимые SDK/Next cache/preview APIs | FP-01, CW прототип, FP-05 | Pinned stable versions, официальные docs при реализации, live publish/guest-denial тест до полного UI |
 | Квоты/регион/недоступная функция account | FP-04, QA-05 | Факт и дата проверки, разрешённый эквивалент в том же контракте; отдельное согласование конкретного расхода |
 | npm окно/ошибочный product→SDK mapping | DP прототип | Live 3–5 CMS, очищенные fixtures; incomplete_period/last-valid и редакторское подтверждение |
-| Гонка CRM/потерянный ответ/дубли | LM прототип | DB lease/token/terminal accepted, безопасный upsert, retry same requestId, attempt cap и fault tests |
+| Гонка CRM/потерянный ответ/дубли | LM прототип | Идемпотентный upsert, условный переход в accepted, частичный unique index, retry того же requestId и fault tests |
 | SDK собирает defaults/после withdrawal | LM прототип и QA-02 | Explicit config, runtime allowlist, network/storage/late-callback проверки pinned SDK |
+| Cron перестал запускаться | DP-08, QA-04 | Vercel Cron → `workflow_dispatch`, без `schedule` в Actions; свежесть метрик видна в UI |
 | Контент растягивает сроки | M1→M2 | Начать редактуру параллельно прототипу; пять CMS/три качественные пары вместо расширения объёма |
-| Backup есть, restore не работает | QA-04 | Изолированный rehearsal, expired deletion до handler, запрет public role, fake CRM replay |
+| Restore не работает | QA-04 | Изолированный rehearsal: CMS export, миграции с нуля, новый сбор метрик, запрет public role на заявки |
 | Разные даты/mapping/readiness в UI и SEO | Интеграция потоков, QA-02 | Общие domain functions/read layer и fixtures, единственный guard, сравнение HTTP/HTML/sitemap |
 
 ## 7. Сводная матрица приёмки
@@ -91,15 +94,15 @@ FP-03 сначала предоставляет migration runner/connections/п�
 | Q06 | CW-05, DP-06 | Signature/repeat/publish/unpublish/rename, real latency ≤60s |
 | Q07 | DP-04, CW-02 | Seed repeat/editorial preservation, dry-run no mutation |
 | Q08 | DP-01, DP-03, DP-05, CW-10 | Fixture source windows/mapping/0/null и live 3–5 CMS |
-| Q09 | DP-05, DP-06 | Lock busy/crash/partial/error и last-valid в DB/UI |
-| Q10 | DP-08, QA-04 | Cleanup сохраняет fallback; isolated restore/new collect |
-| Q11 | DP-07, CW-12 | Formula/evidence/completeness, official/community, pending |
+| Q09 | DP-05, DP-06, DP-08 | Lock busy/crash/partial/error, last-valid в DB/UI, ежедневный запуск |
+| Q10 | DP-08, QA-04 | Isolated restore: CMS export, миграции, новый сбор |
+| Q11 | DP-07, CW-12 | Formula/evidence/completeness, official/community, mapping_changed, свежесть 90 дней |
 | Q12 | LM-02, LM-03, LM-05, LM-08 | Server validation, permission, honeypot/rate limit, доступная форма |
-| Q13 | LM-02–LM-04, LM-08, LM-09 | DB/fake CRM races, timeout/lost reply/attempt cap и live dev accepted |
+| Q13 | LM-02–LM-04, LM-08 | DB/fake CRM races, timeout/lost reply и live dev accepted |
 | Q14 | LM-03, LM-05–LM-08, QA-02 | No-consent CRM success; false success исключён |
 | Q15 | LM-06, LM-08, QA-02 | Network/storage unknown/denied/granted/withdraw/reload/late callback |
 | Q16 | LM-01, LM-06–LM-08, QA-02 | No-PII schema, UTM allowlist, dedupe, synthetic funnel + real dashboard |
-| Q17 | FP-03, LM-02, LM-09, QA-04 | Private TTL/delete/restore и реальные SQL role/target запреты |
+| Q17 | FP-03, LM-02, LM-09, QA-04 | Нет email в БД, удаление по сроку в Brevo/БД и реальные SQL role/target запреты |
 | Q18 | CW-15, QA-03 | axe + ручной критический путь VoiceOver/keyboard/reflow |
 | Q19 | CW-15, QA-03, QA-05 | Pinned Lighthouse budget и production HTTP smoke |
 
@@ -131,8 +134,8 @@ DoD и Qxx:
 
 ## 10. Проверка пакета планов
 
-Пакет сверяется с актуальными 02–12 и ADR 0013: обязательные CMS/SEO/форма/consent/измерение включены в прототип, исключённые возможности не стали задачами v1. Seed CLI принадлежит DP-04, cache handlers — CW-05, типизированный snapshot read model — DP-06/DP-07, private lead state — LM, итоговая приёмка/выпуск — QA. Проверки задачи и общий gate используют одни evidence, а не считаются повторной реализацией функции.
+Пакет сверяется с актуальными 02–12, ADR 0013 и ADR 0014: обязательные CMS/SEO/форма/consent/измерение включены в прототип, исключённые возможности не стали задачами v1. Seed CLI принадлежит DP-04, cache handlers — CW-05, read model метрик — DP-06, чтение AI-review — DP-07, дизайн — CW-16, заявки без email — LM, итоговая приёмка/выпуск — QA. Проверки задачи и общий gate используют одни evidence, а не считаются повторной реализацией функции.
 
-Проверены локальные ссылки, уникальность ID 43 задач, наличие артефактов и DoD, таблицы и формат Markdown. Граф явных предшественников проверяется отдельно от пояснений о более поздней интеграции. Исправлены циклические трактовки content/templates, schema/seed, environment/smoke и production targets/release; многошаговые handoffs явно описаны в FP-03, FP-04 и QA-05.
+Проверены локальные ссылки, уникальность ID 44 задач, наличие артефактов и DoD, таблицы и формат Markdown. Граф явных предшественников проверяется отдельно от пояснений о более поздней интеграции. Исправлены циклические трактовки content/templates, schema/seed, environment/smoke и production targets/release; многошаговые handoffs явно описаны в FP-03, FP-04 и QA-05.
 
 Эта проверка подтверждает структуру плана. Внешние аккаунты, текущие API/версии, команды, макеты и Q01–Q19 ещё предстоит проверить при реализации; все их текущие статусы остаются «не выполнено».

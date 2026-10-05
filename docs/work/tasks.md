@@ -24,26 +24,27 @@
 | CW-13 | [Подготовить production editorial content](../plans/02-content-and-public-web.md) | planned | — | — |
 | CW-14 | [Завершить SEO, metadata, structured data и технические страницы](../plans/02-content-and-public-web.md) | planned | — | — |
 | CW-15 | [Подготовить public web к общей приёмке](../plans/02-content-and-public-web.md) | planned | — | — |
-| DP-01 | [Доменные контракты снимков и mappingKey](../plans/03-data-and-collector.md) | planned | — | — |
-| DP-02 | [Snapshot SQL migrations и права таблиц](../plans/03-data-and-collector.md) | planned | — | — |
+| CW-16 | [Визуальная система и макеты ключевых экранов](../plans/02-content-and-public-web.md) | planned | — | — |
+| DP-01 | [Доменные контракты метрик и mappingKey](../plans/03-data-and-collector.md) | planned | — | — |
+| DP-02 | [SQL-миграции текущих метрик и права таблиц](../plans/03-data-and-collector.md) | planned | — | — |
 | DP-03 | [Чтение и проверка published mapping из Sanity](../plans/03-data-and-collector.md) | planned | — | — |
 | DP-04 | [Безопасный seed отсутствующих CMS-документов](../plans/03-data-and-collector.md) | planned | — | — |
 | DP-05 | [Metrics collector и один writer](../plans/03-data-and-collector.md) | planned | — | — |
-| DP-06 | [Snapshot read model, fallback и cache hooks](../plans/03-data-and-collector.md) | planned | — | — |
-| DP-07 | [Перенос опубликованного ручного AI-review](../plans/03-data-and-collector.md) | planned | — | — |
-| DP-08 | [Retention, snapshot maintenance и restore rehearsal](../plans/03-data-and-collector.md) | planned | — | — |
+| DP-06 | [Read model метрик, fallback и cache hooks](../plans/03-data-and-collector.md) | planned | — | — |
+| DP-07 | [Чтение опубликованного AI-review и расчёт балла](../plans/03-data-and-collector.md) | planned | — | — |
+| DP-08 | [Ежедневный запуск collector и восстановление метрик](../plans/03-data-and-collector.md) | planned | — | — |
 | LM-01 | [Закрепить доменные интерфейсы, target selection и безопасные fixtures](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
-| LM-02 | [Создать приватную lead-схему и миграции](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
-| LM-03 | [Реализовать POST /api/leads, идемпотентность и lease](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
+| LM-02 | [Создать lead-схему без email и миграции](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
+| LM-03 | [Реализовать POST /api/leads и идемпотентность](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | LM-04 | [Реализовать Brevo Contacts adapter и модель обновления контакта](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | LM-05 | [Собрать доступную форму и состояния заявки](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | LM-06 | [Реализовать consent state machine без раннего SDK](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | LM-07 | [Добавить event allowlist, атрибуцию и accepted funnel](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | LM-08 | [Пройти независимый вертикальный прототип формы и измерения](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
-| LM-09 | [Ввести TTL, CRM deletion, private backup и восстановление](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
+| LM-09 | [Ввести TTL и удаление заявок в Brevo и БД](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
 | QA-01 | [CI и единый набор доказательств](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-02 | [Сквозная приёмка и отказные сценарии](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-03 | [Доступность и performance](../plans/05-quality-operations-and-release.md) | planned | — | — |
-| QA-04 | [Maintenance, backups и restore rehearsal](../plans/05-quality-operations-and-release.md) | planned | — | — |
+| QA-04 | [Maintenance, расписание и restore rehearsal](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-05 | [Production подготовка и release gate](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-06 | [Публичный кейс и закрытие v1](../plans/05-quality-operations-and-release.md) | planned | — | — |

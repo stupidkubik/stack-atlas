@@ -1,27 +1,27 @@
 # PkgCompass: реестр решений и старт реализации
 
-Дата: 5 октября 2026. Актуальная рамка — [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md). Открытых продуктовых/архитектурных решений, блокирующих начало реализации, нет. Это не подтверждение готовности приложения к релизу.
+Дата: 5 октября 2026. Актуальная рамка — [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md) с упрощениями учебного v1 из [ADR 0014](decisions/0014-learning-project-simplifications.md). Открытых продуктовых/архитектурных решений, блокирующих начало реализации, нет. Это не подтверждение готовности приложения к релизу.
 
 ## 1. Принятые решения
 
 | Решение | Источник |
 | --- | --- |
 | PkgCompass, каталог headless CMS, product отдельно от SDK/repository | ADR 0002 и 02 |
-| English-only v1, document-level content locale и /en/ URLs | ADR 0001/0008/0009 |
+| English-only v1, document-level content locale и /en/ URLs; карточка `/en/tools/{slug}/`, сущность `product` | ADR 0001/0008/0009, 0014 |
 | 5–8 CMS и 3–5 содержательных сравнений | ADR 0005/0006 и актуальный 0013 |
 | CMS/SEO/доступность + форма→CRM + consent/аналитика в v1 | ADR 0013, 02, 09, 10 |
-| AI-readiness: types/llmsTxt/MCP, 25/20/20, знаменатель65, manual review достаточен | ADR 0002/0013 и 07 |
-| Next.js, Sanity, Vercel Hobby, Neon PostgreSQL, Actions CLI | ADR 0003/0007/0010/0012 с уточнениями 0013 |
-| Ограниченный collector, один writer, snapshots без ledger/receipts/pointers/resume | ADR 0013 и 06 |
-| Brevo Contacts API, PostHog Cloud EU, accepted lead conversion | ADR 0013, 09, 10 |
+| AI-readiness: types/llmsTxt/MCP, веса 25/20/20, знаменатель 65, ручной review читается из Sanity, свежесть 90 дней | ADR 0002/0013/0014 и 07 |
+| Next.js, Sanity, Vercel Hobby, Neon PostgreSQL, Actions CLI с ежедневным запуском через Vercel Cron | ADR 0003/0007/0010/0012 с уточнениями 0013/0014 |
+| Ограниченный collector, один writer, только текущее состояние метрик | ADR 0013/0014 и 06 |
+| Brevo Contacts API (единственное хранилище email), PostHog Cloud EU, accepted lead conversion | ADR 0013/0014, 09, 10 |
 | Drizzle/migrations; Tailwind; Vitest/Playwright/axe/Lighthouse | 05; defaults реализации |
-| UI: светлый каталог с редакционными элементами | ADR 0011; макеты в реализации |
-| Изоляция dev/prod сразу, private lead state отдельно от public snapshots | 05/12 |
-| Retention: snapshots30d с fallback, leads30d, lead backups7d, analytics90d, reports14d | 06/09/10/12 |
+| UI: светлый каталог с редакционными элементами; визуальная система и макеты — задача CW-16 | ADR 0011/0014 |
+| Изоляция dev/prod сразу, заявки отдельно от публичных метрик | 05/12 |
+| Хранение: метрики — только текущее состояние; заявки 30 дней; аналитика 90 дней; отчёты 14 дней; backup — только CMS export | 06/09/10/12 |
 | Публичный репозиторий к портфолио-релизу, private development допустим; без secrets/PII | ADR 0013 |
 | Переводы, A/B, newsletter/DOI, агенты/расширения позже | 02/10 |
 
-Исторические ADR не отменяются целиком; заменённые пункты помечены и при конфликте уступают 0013. Реестр не создаёт вторую независимую спецификацию.
+Исторические ADR не отменяются целиком; заменённые пункты помечены и при конфликте уступают 0013 и 0014. Реестр не создаёт вторую независимую спецификацию.
 
 ## 2. Первая реализационная задача
 

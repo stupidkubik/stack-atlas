@@ -22,7 +22,7 @@
 1. Реализовать типизированный server config по 05 §4: APP_ENV выбирает согласованные CMS/SQL/CRM/analytics targets. Валидировать необходимые переменные при старте соответствующего компонента, выводить только безопасную причину ошибки. Public env экспортировать явным allowlist.
 2. Local/CI/untrusted PR используют synthetic CMS, fake CRM, stub analytics, API fixtures и временный PostgreSQL. Trusted preview использует development. Production targets не подставляются автоматически при отсутствии dev-конфига.
 3. Подготовить общие synthetic IDs, фиксированные UTC часы и fixtures: пять CMS, scoped SDK, monorepo, продукт без SDK, draft, rename, одна пара, полный/неполный AI-review. Fixtures не содержат реальные email, секреты или приватный draft text.
-4. Определить интерфейсы repositories/adapters для CMS, snapshot read/write, CRM и measurement. Подмена live/fake задаётся конфигурацией entry point; доменные функции остаются чистыми. Не строить универсальный plugin framework.
+4. Определить интерфейсы repositories/adapters для CMS, чтения и записи метрик, CRM и measurement. Подмена live/fake задаётся конфигурацией entry point; доменные функции остаются чистыми. Не строить универсальный plugin framework.
 5. Добавить safe error/log/report convention: status/code/environment/run UUID допустимы, тела заявок, IP, токены, full query и credential requestId в публичных логах запрещены. Обработать отсутствие CMS как 503 при отсутствии кеша, отсутствие SQL — как недоступность метрик без потери редакционного контента.
 
 **Артефакты:** config/adapters, fixture dataset и adapter selection, таблица targets без секретных значений в README.
@@ -31,12 +31,12 @@
 
 ## FP-03 — Базовые миграции, connections и SQL-права
 
-**Зависимости:** FP-01, FP-02. Детальные схемы snapshots и leads принадлежат DP/LM; здесь задаётся единый механизм миграций.
+**Зависимости:** FP-01, FP-02. Детальные схемы метрик и заявок принадлежат DP/LM; здесь задаётся единый механизм миграций.
 
 FP-03 выполняется в два прохода: сначала runner/connections/пустые роли для начала DP/LM, затем GRANT и отрицательные role tests после появления таблиц. Зависимость DP/LM от FP-03 означает доступность первого прохода, а не ожидание готовых таблиц; это исключает цикл между baseline и доменными миграциями.
 
 1. Поднять локальный/временный PostgreSQL и Drizzle migration runner с явным `--env`. Разделить pooled web connections и direct session для migrations/collector lock.
-2. Создать роли public snapshot reader, collector snapshot writer, lead writer и migration owner. После появления таблиц из DP/LM применить GRANT, включая запрет public/collector доступа к private leads; не полагаться на naming или приложение вместо SQL-прав.
+2. Создать роли public metrics reader, collector metrics writer, lead writer и migration owner. После появления таблиц из DP/LM применить GRANT, включая запрет public/collector доступа к private leads; не полагаться на naming или приложение вместо SQL-прав.
 3. Ввести порядок применения миграций, схему миграционного журнала инструмента, проверку migration history и чистой базы. Это не collector ledger. Не создавать самостоятельную роль AI-review.
 4. Write CLI требует явный environment, production — также `--allow-production`; применимость к deploy-targeted handlers оговорена в 12. Dry-run не получает неявный apply.
 5. Установить правило совместимых миграций: при релизе сначала добавляем совместимую схему, затем код; удаление/изменение данных — отдельная задача с backup. Откат приложения не обещает откат CMS/CRM/SQL.
@@ -52,8 +52,8 @@ FP-03 выполняется в два прохода: сначала runner/con
 Сначала создать targets/credentials (шаги 1–3); это вход для live частей DP-03–DP-07, CW и LM. Затем вместе с adapters выполнить smoke/сохранить fixtures (шаги 4–5) и закрыть полный DoD FP-04. Зависимость потока от FP-04 означает готовность targets, а не ожидание smoke, который проверяет этот же поток.
 
 1. Создать Sanity development dataset, Neon development schema-only branch, отдельный Brevo requests dev list и PostHog EU dev project. Studio и web/CLI должны указывать на один dev target. Production private rows не копировать.
-2. Проверить текущие account quotas, регионы, права и совместимость API по официальным источникам во время настройки; сохранить дату и безопасную сводку. Включить бюджет backup, Actions и проверку разрешённого использования hosting. Не считать все интеграции бесплатными по умолчанию. Платная функция требует конкретного предложения и разрешения на расход.
-3. Выдать раздельные credentials из 05/12, настроить signed webhook, preview credential, CRM attributes и отключённые campaigns, consent-only analytics config. Секреты хранить в выбранных secret stores, не в документации.
+2. Проверить текущие account quotas, регионы, права и совместимость API по официальным источникам во время настройки; сохранить дату и безопасную сводку. Включить бюджет Actions, лимиты Vercel Cron и проверку разрешённого использования hosting. Не считать все интеграции бесплатными по умолчанию. Платная функция требует конкретного предложения и разрешения на расход.
+3. Выдать раздельные credentials из 05/12, настроить signed webhook, preview credential, CRM attributes и отключённые campaigns, consent-only analytics config, `CRON_SECRET` и fine-grained `GITHUB_DISPATCH_TOKEN`. Проверить, нужно ли включать workflow через API перед `workflow_dispatch`, и условия некоммерческого использования Vercel Hobby. Секреты хранить в выбранных secret stores, не в документации.
 4. Использовать выделенный тестовый alias владельца только для development заявки; повторно не применять его в production. Проверить live mapping 3–5 CMS, сохранять только очищенные fixtures с датами/версиями источников.
 5. Записать фактические CLI-команды, target identifiers без секретов и подтверждённые ограничения аккаунтов. Ошибки доступа устранять в прототипе, не отмечать smoke пройденным на fake adapters.
 
@@ -66,7 +66,7 @@ FP-03 выполняется в два прохода: сначала runner/con
 **Зависимости:** FP-04, CW-07, минимальные DP-05–DP-07 и LM-08. Детальный состав прототипа перечислен в [общем плане](../14-core-development-plan.md).
 
 1. На 3–5 CMS и одном сравнении показать: seed → draft → preview → publish → server HTML, metadata и обновление связанных страниц без deploy.
-2. Выполнить metrics/AI collect → read model → отображение дат/evidence; вызвать partial source failure, mapping change и новый run после crash; проверить last-valid и lock busy.
+2. Выполнить collect метрик → read model → отображение дат и спарклайна; опубликовать AI-review в Studio и увидеть его на сайте после webhook; вызвать partial source failure, смену источника и новый run после crash; проверить last-valid и lock busy.
 3. С comparison открыть форму. Проверить dev Brevo accepted, потерянный ответ и повтор, отказ CRM и DB; при no-consent успешной форме в сети нет analytics.
 4. Отдельно при granted пройти comparison → form → accepted; показать событие в dev PostHog и отсутствие PII. Отозвать согласие, дождаться отложенного callback и проверить reload.
 5. Записать прототипный отчёт с commit, версиями, Q-кодами, реальными и fake доказательствами отдельно. Не требовать от прототипа полного контента/дизайна или release performance, но критические security/correctness нарушения устранить до расширения каталога.

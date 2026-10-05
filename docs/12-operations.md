@@ -1,74 +1,90 @@
 # PkgCompass: эксплуатация v1
 
-Дата: 5 октября 2026. По [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md). Приложения/скриптов ещё нет: команды ниже — интерфейс к реализации, их предстоит проверить в чистом checkout.
+Дата: 5 октября 2026. По [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md) и [ADR 0014](decisions/0014-learning-project-simplifications.md). Приложения и скриптов ещё нет: команды ниже — интерфейс к реализации, их предстоит проверить в чистом checkout.
 
-## 1. Окружения без перехода A → B
+## 1. Окружения
 
-| Среда | CMS/SQL | CRM/аналитика |
+| Среда | CMS / SQL | CRM / аналитика |
 | --- | --- | --- |
-| Local/CI/untrusted PR | Synthetic CMS/API fixtures, временный PostgreSQL | Fake adapters, без live secrets |
-| Development/trusted preview | Sanity development + Neon development branch | Отдельный Brevo dev list, только выделенный тестовый email-alias владельца, никогда не используемый в production; PostHog dev project |
+| Local / CI / untrusted PR | Synthetic CMS/API fixtures, временный PostgreSQL | Fake adapters, без live secrets |
+| Development / trusted preview | Sanity development + Neon development branch | Отдельный Brevo dev list, только выделенный тестовый email-alias владельца, никогда не используемый в production; PostHog dev project |
 | Production | Sanity production + Neon production branch | Brevo production requests list, PostHog production EU project |
 
-Создать development в первой интеграционной задаче; production отдельно до release. Development branch schema-only/seed, не копия private production leads. Тесты не меняют общий live seed конкурентно: namespace и последовательный dev smoke. Обычный PR не получает writer credentials. Production не используется для экспериментов; изменение APP_ENV связывает CMS/DB/CRM/analytics targets одной конфигурацией.
+Development создаётся в первой интеграционной задаче, production — отдельно до release. Development branch — schema-only плюс seed. Тесты не меняют общий live seed конкурентно: namespace и последовательный dev smoke. Обычный PR не получает writer credentials. `APP_ENV` связывает CMS/DB/CRM/analytics targets одной конфигурацией.
 
-Backup SQL migrations одинаковы для local/dev/prod; ветка Neon не заменяет migrations. Regions и connection settings фиксирует account setup; web pooled, collector advisory lock/migrations direct. Нет обязательного отдельного процесса миграции окружений.
+SQL migrations одинаковы для local, dev и prod; ветка Neon не заменяет миграции. Регион и параметры подключения фиксирует account setup: web — pooled connection, collector lock и migrations — direct.
 
 ## 2. Доступы и bootstrap
 
-Env-контракт — [05 §4](05-architecture.md#4-конфигурация-без-значений). .env.example только с именами. Public database reader имеет SELECT snapshots, не lead tables. Collector writer имеет snapshots/lock, не leads и не CMS writes. Lead writer — lead_requests/rate_limits; migration owner — schema/backup. SQL GRANT проверяется Q17.
+Env-контракт — [05 §4](05-architecture.md#4-конфигурация-без-значений), `.env.example` содержит только имена. SQL-роли:
 
-Sanity: preview-read token на сервере, seed-write token только оператору; редакторская Studio session меняет aiReview. SANITY_REVIEW_WRITE_TOKEN/DATABASE_REVIEW_URL не используются. На бесплатном CMS не предполагаем custom document roles: allowlists и secret separation остаются обязательны.
+- public reader — SELECT `metrics_current`, без доступа к таблицам заявок;
+- collector writer — `metrics_current` и lock, без заявок и без записи в CMS;
+- lead writer — `lead_requests` и `rate_limits`;
+- migration owner — схема.
 
-Bootstrap: npm ci → env template → local PostgreSQL → migrations → fixtures → app/Studio. Live dev: создать targets, проверить quotas/region, запустить migrations/seed --dry-run, apply, настроить подписанный webhook, Brevo list/custom attributes, PostHog consent-only config и dashboard. PRIVACY_CONTACT_EMAIL — реальный контакт владельца до публичной формы. Production origin может быть Vercel URL, домен не обязателен.
+GRANT проверяется Q17.
+
+Sanity: preview-read token на сервере, seed-write token только у оператора, `aiReview` меняется редакторской сессией Studio. Custom document roles на бесплатном плане не предполагаются: allowlists и разделение секретов обязательны.
+
+Bootstrap: `npm ci` → env template → local PostgreSQL → migrations → fixtures → app/Studio. Live dev: создать targets, проверить quotas и регион, выполнить migrations, `seed --dry-run`, затем `--apply`; настроить подписанный webhook, Brevo list и custom attributes, PostHog consent-only config и dashboard, Vercel Cron и GitHub dispatch token. `PRIVACY_CONTACT_EMAIL` — реальный контакт владельца до публичной формы. Production origin может быть Vercel URL, домен не обязателен.
 
 ## 3. Планируемые команды
 
 | Команда | Результат |
 | --- | --- |
-| npm run dev / npm run studio | Local app / Studio |
-| npm run db:migrate -- --env development | Версионированная схема в выбранном target |
-| npm run seed -- --env development --dry-run или --apply | Отсутствующие CMS drafts, существующие не меняются |
-| npm run collect -- --env development --mode metrics или ai --dry-run/--apply | Снимки и очищенный отчёт, один writer |
-| npm run cache:refresh -- --env development | Повтор invalidation после collector failure |
-| npm run leads:retry -- --env development --request-id UUID | Операторский повтор после исправления CRM, с lease/attempt guard |
-| npm run maintenance -- --env development --dry-run/--apply | Snapshot cleanup и private lead TTL/delete |
-| npm run backup / npm run restore -- --env development | Очищенный CMS export, snapshot SQL и отдельный encrypted lead backup |
-| npm run lint / typecheck / test / build / test:e2e | Проверки по 11 |
+| `npm run dev` / `npm run studio` | Local app / Studio |
+| `npm run db:migrate -- --env development` | Версионированная схема в выбранном target |
+| `npm run seed -- --env development --dry-run` или `--apply` | Отсутствующие CMS drafts, существующие не меняются |
+| `npm run collect -- --env development --dry-run` или `--apply` | Текущие метрики и очищенный отчёт, один writer |
+| `npm run cache:refresh -- --env development` | Повтор invalidation после сбоя collector |
+| `npm run maintenance -- --env development --dry-run` или `--apply` | Удаление заявок старше 30 дней в Brevo и БД, очистка rate limits |
+| `npm run backup` / `npm run restore -- --env development` | CMS export / импорт export в выбранный dataset |
+| `npm run lint` / `typecheck` / `test` / `build` / `test:e2e` | Проверки по 11 |
 
-Все write commands принимают явный --env; production дополнительно --allow-production, кроме deploy-targeted server handler. Leads retry request credential не печатается в public logs. Реальные синтаксис/скрипты в README после проверки; текущая таблица не притворяется существующим CLI.
+Все write-команды принимают явный `--env`; production дополнительно требует `--allow-production`, кроме server handlers конкретного деплоя. Реальный синтаксис появится в README после проверки; таблица не притворяется существующим CLI.
 
 ## 4. Расписание и диагностика
 
-Actions workflow_dispatch + daily metrics, weekly AI, daily maintenance. concurrency collector-<env>, cancel-in-progress=false и session advisory lock защищают snapshot writes/cleanup; DB lock нужен и локальному apply. Lead TTL применяется отдельным maintenance шагом со своими credentials/lease, не теми же snapshot правами. HTTP retries ограничены по 06/09.
+Workflows в GitHub Actions запускаются только через `workflow_dispatch`, без `schedule`: GitHub отключает scheduled workflows через 60 дней без активности в публичном репозитории. Раз в день Vercel Cron вызывает `/api/cron/daily`. Handler проверяет `CRON_SECRET` и через GitHub API запускает workflow `daily` для своего окружения. Workflow выполняет две независимые job: сбор метрик с collector credentials и lead maintenance с lead credentials. Нужно ли перед dispatch включать workflow через API, проверяется в FP-04. Ручной запуск — тот же `workflow_dispatch`.
 
-Отчёты run: source statuses/errors, run UUID, counts/duration/cache status, no PII. Actions failure notification владельцу через стандартные account notifications, не Slack/email send integration. Владелец проверяет ошибки/свежесть и CRM requests ежедневно. Stale в UI показывает исходную дату. Логи app/CRM содержат safe status codes, не email, request body, tokens, IP и полный query.
+Concurrency `collector-<env>`, `cancel-in-progress = false` и session advisory lock защищают запись метрик; lock нужен и локальному `--apply`. HTTP retries ограничены по 06 и 09.
+
+Отчёты запусков: статусы и ошибки источников, run UUID, counts, duration, статус кеша, без PII. О сбоях Actions владелец узнаёт из стандартных уведомлений аккаунта; отдельные Slack/email-интеграции не создаются. Владелец ежедневно проверяет ошибки, свежесть и заявки в CRM. UI при устаревании показывает исходную дату. Логи приложения и CRM содержат безопасные коды, без email, тела запроса, токенов, IP и полного query.
 
 ## 5. Восстановление
 
 | Сбой | Действие |
 | --- | --- |
-| Source timeout/429 | Старый last-valid с датой, новый сбор после лимита |
-| Collector crash/lock busy | Закрыть зависший процесс/connection если требуется; новый run, без resume |
+| Source timeout / 429 | Остаётся last-valid с датой, новый сбор после лимита |
+| Collector crash / lock busy | Закрыть зависший процесс или connection, если нужно; новый запуск |
 | Mapping изменён | Подтвердить связь в CMS, пересобрать; старые данные не смешиваются |
-| Review изменён | UI pending, ручной AI-run переносит published review |
-| Invalidation failure | cache:refresh либо TTL ≤3600s; данные не откатываются |
-| CRM response потерян/lease expired | Повтор того же requestId/upsert; accepted только после success |
-| CRM config/attempt cap | Исправить credential/schema, операторский leads:retry |
-| Backup/restore | Восстановить контент/схему/lead state в изоляции; пересобрать missing metrics |
+| AI-review устарел или mapping изменился | Новый review в Studio; публикация обновляет страницы через webhook |
+| Invalidation failure | `cache:refresh` либо TTL ≤ 3600 s; данные не откатываются |
+| CRM-ответ потерян / CRM недоступна | Посетитель повторяет тот же `requestId`; accepted только после успеха |
+| Потеря БД | Миграции с нуля, новый сбор метрик; заявки остаются в Brevo |
+| Потеря CMS-контента | Импорт последнего CMS export |
 
-Неверный snapshot исправляется удалением точного ID после backup с операторским отчётом и новым сбором. Нет инфраструктуры exclusions/reconciliation. Restore проверяет stable IDs и matching mappingKey на sample, не выполняет распределённый transactional replay.
+Неверное значение метрики исправляется исправлением mapping или источника и новым сбором, который перезапишет строку.
 
 ## 6. Retention и backup
 
-Snapshots: 30 дней, pinned last-valid/latest/last-complete сохраняются. CI reports:14 дней. Private lead rows и project CRM data:30 дней по 09; rate limits:24h. PostHog events:90 дней по 10. Сырые API payload не архивируем постоянно.
+- Метрики: только текущее состояние, истории нет.
+- Заявки в БД и проектные данные в Brevo: 30 дней по 09. Rate limits: 24 часа.
+- События PostHog: 90 дней по 10. Отчёты CI: 14 дней.
+- Сырые API payload не архивируются.
 
-Перед schema/cleanup изменениями CMS export и SQL backup snapshots; еженедельный content/snapshot backup с окном 30 дней. Private lead state — daily encrypted backup с окном 7 дней в закрытом operator storage, ключ отдельно, не public CI artifacts. Доступ и стоимость backup проверяются account setup; pg_dump/external encrypted file — реализационный путь, branch не объявляется backup. Snapshots не содержат PII; lead backup сохраняет dedup state/leases и permission, но не rate-limit историю. Во время restore handlers/collectors выключены, истёкшие lease сбрасываются, expired lead/CRM data удаляются до включения.
+Backup — только CMS export: перед изменениями схемы и еженедельно, окно 30 дней, в закрытом хранилище владельца. SQL-бэкап не нужен: метрики восстанавливаются сбором, заявки хранятся в Brevo. Ветка Neon бэкапом не объявляется.
 
-Перед release rehearsal: CMS export →development namespace + SQL restore в test DB →publication/read smoke + fake CRM replay/deletion →новый collector run. Сверить IDs/mapping и last-valid, убедиться, что public role не читает leads. Потерянная история метрик допускает новый сбор; потеря принятых private requests без backup не принимается.
+Перед release — rehearsal восстановления:
+
+1. Импорт CMS export в изолированный dataset. Если квота Sanity не позволяет третий dataset — в development после его собственного export.
+2. Пустая test DB из migrations.
+3. Новый collector run.
+4. Smoke публикации и чтения; проверка, что public role не читает заявки.
 
 ## 7. Release и расходы
 
-До production настройка аккаунтов/targets/secrets, account budget и quotas, privacy contact, отключённые CRM campaigns, real smoke и Q01–Q19. Это реализуемые задачи, не открытые продуктовые решения. Платные upgrades требуют отдельного разрешения владельца, автоматических покупок нет. Public demo не запускает рассылку.
+До production: аккаунты, targets, secrets, бюджет и квоты, privacy contact, отключённые кампании CRM, Vercel Cron, real smoke и Q01–Q19. Это задачи реализации, а не открытые продуктовые решения. Платные upgrades требуют отдельного разрешения владельца, автоматических покупок нет. Public demo не запускает рассылку.
 
-После deploy: home/catalog/CMS/comparison/form/privacy/methodology/sitemap HTTP smoke, draft denial, fresh source status, dashboard event при явном consent. Synthetic lead только с собственным адресом владельца и удалением; чужих контактов не создавать. Откат приложения не откатывает CMS/DB/CRM: schema migrations backward-compatible, data rollback отдельной операторской задачей.
+После deploy: HTTP smoke home/catalog/product/comparison/form/privacy/methodology/sitemap, отказ guest в draft, свежий статус источников, событие в dashboard при явном consent. Тестовая заявка только с собственным адресом владельца и последующим удалением; чужих контактов не создавать. Откат приложения не откатывает CMS/DB/CRM: миграции обратно совместимы, откат данных — отдельная операторская задача.

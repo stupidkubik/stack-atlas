@@ -18,7 +18,7 @@ ADR 0004 переносил форму/consent/аналитику в следу�
 | --- | --- |
 | 5–8 CMS, 3–5 редакционных сравнений | Не наращиваем каталог ради programmatic SEO |
 | CMS, preview, публикация, SEO, доступность/performance | Без универсального builder и микросервисов |
-| PostgreSQL + Actions + стабильные ID | Один collector writer, повторный сбор, snapshots/read queries |
+| PostgreSQL + Actions + стабильные ID | Один collector writer, повторный сбор, только текущие метрики (ADR 0014) |
 | AI-сигналы с evidence и честной формулой | Manual review достаточен, детекторы позже |
 | Обработка partial errors и backup | Без общего движка resume/reconciliation |
 | Consent, события и одна CRM-форма | Без newsletter/DOI/email automation/A/B в v1 |

@@ -1,6 +1,6 @@
 # PkgCompass: consent и измерение v1
 
-Дата: 5 октября 2026. Обязательный контракт по [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md). Провайдер — PostHog Cloud EU; аккаунт/дашборд пока не настроены. Это продуктовый режим сбора, не декларация юридического соответствия.
+Дата: 5 октября 2026. Обязательный контракт по [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md) и [ADR 0014](decisions/0014-learning-project-simplifications.md). Провайдер — PostHog Cloud EU; аккаунт/дашборд пока не настроены. Это продуктовый режим сбора, не декларация юридического соответствия.
 
 ## 1. Consent lifecycle
 
@@ -14,14 +14,14 @@ withdraw: остановить capture, выключить/очистить SDK 
 
 ## 2. Схема событий
 
-track(name, properties) имеет типизированный allowlist и runtime validation. Common fields: eventSchemaVersion=1, environment=development|production, routeType, entityId?, locale=en, occurredAt, eventId UUID. SDK anonymous distinct_id допускается только после согласия. routeType=home|catalog|library|comparison|methodology|lead_form|privacy; entityId только собственные стабильные catalog IDs.
+track(name, properties) имеет типизированный allowlist и runtime validation. Common fields: eventSchemaVersion=1, environment=development|production, routeType, entityId?, locale=en, occurredAt, eventId UUID. SDK anonymous distinct_id допускается только после согласия. routeType=home|catalog|product|comparison|methodology|lead_form|privacy; entityId только собственные стабильные catalog IDs.
 
 | Событие | Когда | Дополнительные свойства |
 | --- | --- | --- |
 | page_viewed | После согласия, при смене route; один раз на navigation | routeType, entityId? |
 | comparison_viewed | При открытии опубликованного сравнения | comparisonId |
-| official_resource_clicked | Перед переходом к официальному источнику | libraryId, resourceType=docs / website |
-| lead_form_viewed | При открытии страницы формы | entryPoint=nav / comparison / library / home |
+| official_resource_clicked | Перед переходом к официальному источнику | productId, resourceType=docs / website |
+| lead_form_viewed | При открытии страницы формы | entryPoint=nav / comparison / product / home |
 | lead_accepted | Ответ accepted собственного requestId, analyticsEligible=true, текущий consent granted | conversionId, scenario, campaignKey? |
 
 Не отправляем событие простого submit как конверсию. Нет email, email hash, IP, CRM/contact/requestId, form values кроме scenario enum, пользовательского q, полного URL, arbitrary error text. conversionId — отдельный случайный UUID; он не является request credential. before_send запрещает незаданные SDK properties, исключение — технический anonymous distinct_id и нужные транспортные поля SDK.
@@ -34,7 +34,7 @@ UTM: только после согласия извлекаем utm_source/medi
 
 Воронка: уникальные consenting anonymous visitors, открывшие сравнение → открывшие форму → CRM-принятая заявка того же anonymous visitor за 7 суток. Conversion rate = уникальные visitors с qualifying lead_accepted / уникальные visitors с comparison_viewed. Последовательность и окно проверяются в запросе дашборда. Заявки из nav/home считаются отдельным потоком; не вставляются в числитель comparison funnel без preceding comparison_viewed. Дополнительно считаем unique conversionId для объёма операций.
 
-Отказ от consent, блокировщик, закрытие вкладки, server retry/operator action могут оставить принятую CRM-заявку без analytics event. Сервер не отправляет аналитику задним числом и не хранит anonymous ID вместе с email. Операционный отчёт по accepted DB requests — общий объём, analytics funnel — наблюдаемая согласившаяся аудитория. Эти числа не обязаны совпадать. Данные не доказывают uplift или статистическую значимость.
+Отказ от consent, блокировщик, закрытие вкладки или повтор, завершённый после ухода со страницы, могут оставить принятую CRM-заявку без analytics event. Сервер не отправляет аналитику задним числом и не хранит anonymous ID вместе с email. Операционный отчёт по accepted DB requests — общий объём, analytics funnel — наблюдаемая согласившаяся аудитория. Эти числа не обязаны совпадать. Данные не доказывают uplift или статистическую значимость.
 
 ## 4. Дашборд и следующий эксперимент
 

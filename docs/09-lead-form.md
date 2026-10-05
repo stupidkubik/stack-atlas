@@ -1,45 +1,81 @@
 # PkgCompass: заявка → CRM v1
 
-Дата: 5 октября 2026. Обязательный контракт по [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md). Это контактная заявка, не подписка; аккаунт CRM ещё не подключён.
+Дата: 5 октября 2026. Обязательный контракт по [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md) и [ADR 0014](decisions/0014-learning-project-simplifications.md). Это контактная заявка, не подписка; аккаунт CRM ещё не подключён.
 
 ## 1. Обещание и интерфейс
 
-/en/request-shortlist/ — Request a CMS shortlist. Посетитель просит владельца помочь сузить выбор для одного сценария. Ответ вручную по email; без SLA, автоматического письма, периодической рассылки, DOI и подтверждённого статуса адреса. Владелец проверяет заявки в CRM ежедневно после запуска; факт выполнения помощи не является конверсией.
+`/en/request-shortlist/` — Request a CMS shortlist. Посетитель просит владельца помочь сузить выбор для одного сценария. Помощь бесплатная и некоммерческая, это прямо сказано на странице. Ответ вручную по email; без срока ответа, автоматического письма, рассылки, DOI и подтверждения адреса. Владелец проверяет заявки в CRM ежедневно после запуска; факт оказанной помощи конверсией не считается.
 
-Поля: email (trim, lowercase для ключа/CRM, валидный адрес до 254 символов), scenario=marketing_site|editorial_site|commerce_content; обязательный unchecked checkbox «I agree to be contacted about this request»; ссылка на privacy. Свободного текста/имени/телефона нет. Analytics consent независим и не нужен для отправки.
+Поля: email (trim, lowercase для ключа и CRM, валидный адрес до 254 символов); `scenario = marketing_site | editorial_site | commerce_content`; обязательный, изначально не отмеченный checkbox «I agree to be contacted about this request»; ссылка на privacy. Свободного текста, имени и телефона нет. Analytics consent независим и для отправки не нужен.
 
-Состояния: idle → submitting → accepted либо retryable_error/validation_error/rate_limited. Accepted только после подтверждения записи CRM. Текст success: «Your request is saved. The project owner may contact you about this request.» При неизвестном результате: «We could not confirm your request. Please retry.» Сохраняем введённое в памяти вкладки; email не пишется в localStorage, URL или аналитические свойства. Доступные labels, errors и status region обязательны.
+Состояния: `idle → submitting → accepted` либо `retryable_error` / `validation_error` / `rate_limited`. Accepted только после подтверждённой записи в CRM. Текст успеха: «Your request is saved. The project owner may contact you about this request.» При неизвестном результате: «We could not confirm your request. Please retry.» Введённое хранится в памяти вкладки; email не пишется в localStorage, URL и свойства аналитики. Доступные labels, errors и status region обязательны.
 
 ## 2. Серверный путь и данные
 
-POST /api/leads, same-origin JSON, body ≤4KB, Origin проверяется против SITE_URL, server validation и honeypot. Form создаёт requestId UUID и сохраняет его в памяти до изменения email/scenario или accepted; повтор использует тот же ID. Rate limit в PostgreSQL: HMAC(IP) 5 запросов/10 минут, TTL 24h; raw IP не сохраняется. Honeypot возвращает {status:accepted, analyticsEligible:false} без CRM/конверсии. Rate limit и серверный handler не зависят от аналитического consent.
+`POST /api/leads`: JSON, body до 4 KB, проверка Origin, серверная валидация и honeypot.
 
-Таблица lead_requests: requestId UUID PK, dedupKey unique (HMAC-SHA256(normalized email + scenario)), payloadHash (тот же HMAC с contactPermissionVersion), email, scenario, contactPermissionVersion=1, contactPermissionAt, createdAt, updatedAt, state=pending|accepted|failed, deliveryAttempts, leaseToken UUID?, crmContactId?, conversionId UUID, leaseUntil?, safeErrorCode?, expiresAt. dedupKey уникален в пределах retained rows (30 дней). Повтор ID с другим payload →409; повтор email+scenario за 30 дней возвращает прежнюю операцию без новой заявки/конверсии. Другой scenario — отдельная заявка, CRM-контакт общий. После удаления TTL новая заявка допустима.
+- Origin в production — только origin `SITE_URL`. В development дополнительно разрешены `https://$VERCEL_URL` и `https://$VERCEL_BRANCH_URL` текущего деплоя. Локально — `SITE_URL` тестового origin.
+- Форма создаёт UUID `requestId` и держит его в памяти, пока не изменятся email или scenario либо заявка не станет accepted. Повтор использует тот же ID.
+- Rate limit в PostgreSQL: HMAC(IP), 5 запросов за 10 минут, хранение 24 часа; raw IP не сохраняется.
+- Honeypot возвращает `{status: accepted, analyticsEligible: false}` без CRM и без конверсии.
+- Rate limit и handler не зависят от аналитического consent.
 
-email — private operational data в PostgreSQL/Brevo, никогда в Sanity, fixtures/CI logs/analytics. SQL schema мигрируется вместе со snapshots. Web lead credential имеет доступ только к lead_requests/rate_limits, public DB-reader — только к snapshots. Оператор CLI использует lead-write credential для ручного retry/delete; не collector.
+Таблица `lead_requests` без email:
 
-## 3. CRM adapter и отказы
+| Поле | Значение |
+| --- | --- |
+| `request_id` | UUID, PK |
+| `dedup_key` | HMAC-SHA256(нормализованный email + scenario) |
+| `payload_hash` | HMAC того же payload вместе с `contact_permission_version` |
+| `scenario`, `contact_permission_version`, `contact_permission_at` | Контекст и разрешение на контакт |
+| `state` | `pending` / `accepted` / `failed` |
+| `conversion_id` | UUID, создаётся при вставке строки |
+| `created_at`, `updated_at`, `expires_at` | Срок хранения 30 дней от `created_at` |
 
-Провайдер Brevo Contacts API. До реального smoke создать отдельный список PkgCompass requests и custom attributes PKG_SCENARIO (text), PKG_CONTACT_PERMISSION_AT (text ISO), PKG_REQUEST_ID (text). Adapter upsert(email, scenario, permissionAt, requestId): POST /v3/contacts с updateEnabled=true, listIds=[выделенный список], attributes; success — documented 2xx, duplicate — проверить контакт/обновить в соответствии с API, не объявлять любой 400 успехом. Общий contact может иметь последнее scenario; все отдельные retained requests остаются в private DB. Список не подключён к campaign automation. Не сбрасываем unsubscribe/blocklist flags существующего контакта и не включаем рассылки.
+Частичный unique index по `dedup_key` среди строк `state = accepted`. Тот же `requestId` с другим payload → 409.
 
-Источник API: [Brevo create contact](https://developers.brevo.com/reference/create-contact), [update contact](https://developers.brevo.com/reference/update-contact). Upsert устраняет дубли контактов; уникальные ключи БД отдельно устраняют дубли операций. Это не Sales CRM deals/tasks и не доставка письма.
+Email живёт только в памяти запроса и в Brevo; в PostgreSQL, Sanity, fixtures, логах CI и аналитике его нет. Web lead credential имеет доступ только к `lead_requests` и `rate_limits`; public DB reader — только к `metrics_current`.
 
-Короткая транзакция создаёт/находит request и выдаёт delivery lease 30s условным UPDATE; сеть вызывается после commit. Каждый lease имеет отдельный leaseToken; запись failed/accepted допускается только условно по своему token, accepted терминален и не откатывается поздней ошибкой. CRM-call не держит SQL transaction. Конкурентный повтор активной lease →202 pending с Retry-After, без нового CRM-call; клиент не polling бесконечно, предлагает повтор через указанное время. CRM timeout 10s; на один HTTP submit один CRM-call, без скрытой очереди. Accepted state и conversionId сохраняются после success, ответ 200. Если CRM ответ/DB commit потерян, lease истекает; повтор upsert по тому же email безопасен и завершает ту же операцию. Без автоматического resume/worker/outbox.
+## 3. Обработка заявки и CRM
 
-429/5xx/network →failed +503 (429 сервиса не превращается в успех); клиент повторяет тот же requestId. Permanent auth/config/schema error →failed +503 пользователю и safeErrorCode оператору; не выдаём детали CRM. До 3 delivery attempts на операцию; далее только оператор после исправления сбрасывает лимит и повторяет. При недоступной DB →503, CRM не вызывается. При pending от другого requestId с тем же dedupKey не раскрываем прежний ID/статус контакта: даём нейтральный accepted при уже принятой заявке или retryable_error; conversionId для чужого requestId не возвращаем. Это не публичный lookup email.
+Провайдер — Brevo Contacts API. До реального smoke создать отдельный список PkgCompass requests и custom attributes `PKG_SCENARIO` (text), `PKG_CONTACT_PERMISSION_AT` (text ISO), `PKG_REQUESTED_AT` (date). Adapter `upsert(email, scenario, permissionAt)`: `POST /v3/contacts` с `updateEnabled = true`, `listIds = [проектный список]` и атрибутами. Успех — документированный 2xx; любой 400 успехом не объявляется. Список не подключён к кампаниям; флаги unsubscribe/blocklist существующего контакта не сбрасываются.
+
+Источник API: [Brevo create contact](https://developers.brevo.com/reference/create-contact), [update contact](https://developers.brevo.com/reference/update-contact). Upsert по email устраняет дубли контактов; unique index в БД устраняет дубли конверсий. Это не Sales CRM и не доставка писем.
+
+Порядок:
+
+1. Найти строку по `requestId` или вставить новую в `pending`. Если она уже `accepted` — вернуть тот же `conversionId`. При несовпадении payload — 409.
+2. Если другая строка с тем же `dedup_key` уже `accepted` — вернуть нейтральный `{status: accepted, analyticsEligible: false}` без CRM-вызова и без чужого ID.
+3. Вызвать Brevo upsert, timeout 10 s; SQL-транзакция во время вызова не открыта.
+4. При успехе — условный `UPDATE ... SET state = accepted WHERE state <> accepted`. Если частичный unique index сработал (параллельная заявка того же email и сценария успела раньше), ответ — нейтральный accepted с `analyticsEligible: false`.
+5. При ошибке — `state = failed`, ответ 503; клиент повторяет тот же `requestId`.
+
+Конкурентные запросы с одним `requestId` безопасны без lease: оба upsert идемпотентны, переход в `accepted` выполнится один раз, оба ответа получат один `conversionId`. Если ответ CRM потерян, повтор того же `requestId` снова вызывает upsert и завершает операцию. Лимит попыток не нужен: повторы ограничены rate limit. Фоновых очередей и worker'ов нет.
+
+429, 5xx, network и timeout → 503, ответ CRM никогда не превращается в успех. Ошибка конфигурации или авторизации → 503 пользователю и безопасный код в логе. Недоступная БД → 503 без вызова CRM.
 
 ## 4. Ответы и измерение
 
-200 accepted: {status:accepted, conversionId, analyticsEligible:true} только для requestId, владеющего созданной операцией; повтор того же requestId возвращает тот же conversionId. Дубликат с новым ID →{status:accepted, analyticsEligible:false}, без ID исходной операции. 202 pending только для собственного requestId; 400 invalid; 409 changed payload; 429 rate limit; 503 unavailable. RequestId — случайный credential операции: никакого публичного GET по email/requestId. Браузер не передаёт email/CRM ID в 10.
+| Ответ | Когда |
+| --- | --- |
+| `200 {status: accepted, conversionId, analyticsEligible: true}` | Собственный `requestId` дошёл до accepted; повтор возвращает тот же `conversionId` |
+| `200 {status: accepted, analyticsEligible: false}` | Дубликат с новым `requestId` или honeypot; ID исходной операции не раскрывается |
+| 400 / 409 / 429 / 503 | Невалидно / изменённый payload / rate limit / недоступно |
 
-Conversion = одна уникальная accepted operation. Сеть может доставить событие повторно: аналитический запрос дедуплицирует conversionId. Успех формы сохраняется даже при блокировщике аналитики; failed/pending, honeypot и чужой duplicate не создают lead_accepted. Адрес не подтверждён; операционные lead counts не равны consented analytics counts.
+`requestId` — случайный credential операции; публичного GET по email или `requestId` нет. Браузер не передаёт email и CRM ID в аналитику ([10](10-measurement.md)).
+
+Conversion — одна accepted операция. Повторная сетевая доставка события дедуплицируется по `conversionId`. Успех формы сохраняется даже при блокировщике аналитики; failed, honeypot и чужой дубликат не создают `lead_accepted`. Число accepted строк в БД и число событий аналитики не обязаны совпадать.
 
 ## 5. Хранение, удаление, оператор
 
-Private lead rows — 30 дней после createdAt; общий CRM-contact/PKG_* attributes сохраняются до истечения последней retained заявки этого email, затем очищаются; backup private lead state шифруется и живёт 7 дней. Ежедневный maintenance сначала удаляет принадлежащий только проекту CRM-contact, затем DB row; при сбое сохраняет row для повторного удаления. Если контакт имеет другие списки/назначение, удаляет только membership проекта и его PKG_* attributes, не чужой контакт. При другой retained request на этот email не удаляем контакт/list membership и обновляем PKG_* attributes по последней retained заявке, без новой конверсии. Удаление requests оператором по запросу владельца адреса проходит тот же путь; адрес не печатается в отчёте. Восстановление backup требует повторного удаления expired rows до запуска handler.
+- Строки `lead_requests` — 30 дней после `created_at`, удаляются ежедневным maintenance.
+- В Brevo maintenance читает контакты проектного списка и обрабатывает те, у которых `PKG_REQUESTED_AT` старше 30 дней. Каждая заявка обновляет атрибут, поэтому контакт живёт 30 дней после последней заявки. Если контакт есть только в проектном списке, он удаляется целиком. Если у него есть другие списки, удаляется только членство в проектном списке и атрибуты `PKG_*`.
+- Запрос владельца адреса на удаление: оператор удаляет контакт в Brevo по email и строки в БД по HMAC для каждого сценария. Адрес в отчёт не попадает.
+- Бэкапа заявок нет: адреса хранятся в Brevo, а таблица в БД — только состояние дедупликации. При потере таблицы миграции создают её заново, в худшем случае возможна одна лишняя конверсия в течение 30 дней.
+- Ротация `LEAD_HMAC_SECRET` — замена секрета и очистка `rate_limits`. Старые ключи дедупликации перестают совпадать, последствие то же.
 
-Privacy page перечисляет владельца и действующий контакт для обращения, цель формы, Brevo/PostgreSQL, срок 30 дней, независимость analytics consent и способ запросить удаление. Контакт владельца задаётся PRIVACY_CONTACT_EMAIL до публичного запуска; локально fixture. Согласие на контакт не объявляется разрешением на newsletter. Никакая реальная рассылка этим документом не авторизована.
+Privacy-страница называет владельца и действующий контакт, цель формы, Brevo и PostgreSQL, срок 30 дней, бесплатный некоммерческий характер помощи, независимость analytics consent и способ запросить удаление. Контакт задаётся `PRIVACY_CONTACT_EMAIL` до публичного запуска, локально — fixture. Согласие на контакт не является согласием на рассылку.
 
 ## 6. Приёмка
 
-Валидная заявка видна в реальной CRM; fake adapter используется в CI. Проверить invalid/checkbox/honeypot/rate limit; no-consent success; concurrent duplicate; CRM timeout и потерянный success response; retry после lease; attempt cap/operator retry; DB failure без CRM-call; повтор не создаёт новый контакт/конверсию; deletion/TTL и private data isolation. Подробности — [11](11-quality-plan.md), операционные команды — [12](12-operations.md).
+Валидная заявка видна в реальной CRM; в CI используется fake adapter. Проверить: invalid, checkbox, honeypot, rate limit; успех без consent; конкурентные запросы с одним `requestId`; дубликат с новым ID; CRM timeout и потерянный ответ с повтором; отказ БД без вызова CRM; повтор не создаёт новый контакт и новую конверсию; отсутствие email в БД и логах; удаление по сроку в Brevo и БД; Origin preview-деплоя в development. Подробности — [11](11-quality-plan.md), команды — [12](12-operations.md).
