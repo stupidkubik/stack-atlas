@@ -11,12 +11,14 @@
 # Dependencies and build/test output
 node_modules/
 .next/
+.vercel/
 out/
 dist/
 coverage/
 playwright-report/
 test-results/
 .playwright-cli/
+playwright/.auth/
 *.tsbuildinfo
 __pycache__/
 *.py[cod]
