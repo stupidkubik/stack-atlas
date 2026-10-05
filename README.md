@@ -1,6 +1,6 @@
 # PkgCompass
 
-Каталог headless CMS для JS/TS-сайтов. Начат первый проход foundation: воспроизводимый каркас, автономные fixtures и базовые миграции. Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md); внешние интеграции и готовность каталога пока не подтверждены.
+Каталог headless CMS для JS/TS-сайтов. Каркас и автономные fixtures проверены; второй проход foundation готовит миграции и development targets. Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md); внешние интеграции и готовность каталога пока не подтверждены.
 
 ## Начало работы
 
@@ -25,6 +25,7 @@ Stable-версии сверены 5 октября 2026 по официальн
 | ESLint / Next plugin | 10.12.0 / 16.3.8 | Прямой flat config с TypeScript и React Hooks; bundled React-плагин eslint-config-next несовместим с ESLint 10 |
 | Vitest / Vite | 5.0.3 / 8.3.2 | Совместимые Node engines и peers |
 | Playwright | 1.63.0 | Браузерные проверки устанавливаются с появлением сценариев |
+| node-postgres / local PostgreSQL | 8.23.1 / 17.11 | Drizzle PostgreSQL driver; локальный сервер для временных SQL integration checks |
 
 Источники: [Node releases](https://nodejs.org/en/about/previous-releases), [Next.js installation](https://nextjs.org/docs/app/getting-started/installation), [Sanity requirements](https://www.sanity.io/docs/studio/installation), [typescript-eslint dependencies](https://typescript-eslint.io/users/dependency-versions/), [Vitest](https://vitest.dev/guide/), [Playwright](https://playwright.dev/docs/intro).
 
@@ -41,7 +42,7 @@ npm run start
 
 Стартовая страница — `/en/`, `/` перенаправляет на неё. Пока это закрытый от индексации предварительный экран; каталог, форма и live CMS не готовы. `npm run dev` запускает Next.js для разработки. Для каркаса `.env` и внешние аккаунты не нужны.
 
-`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-01; live Studio smoke ещё не выполнен.
+`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-02. Локальный запуск Studio проверен; вход и редактирование контента ещё не проверены.
 
 `npm run test` проверяет foundation config, synthetic fixtures, safe projections и отказные сценарии adapters. Playwright настроен для будущих E2E; пустой запуск `test:e2e` не считается пройденной проверкой. Для E2E требуется `PKGCOMPASS_RUN_ID` текущего run: traces сохраняются в его `evidence/playwright/`. Отчёты не размещаются в tracked files. `next-env.d.ts` создаётся `next typegen` перед проверкой типов и исключён из Git.
 
@@ -61,6 +62,35 @@ npm run start
 
 Fixtures находятся в `src/server/fixtures/`, порты — в `src/domain/ports.ts`, выбор targets — в `src/server/config/`. Они помечены synthetic и не подтверждают данные поставщиков. Public config возвращает только среду и публичные PostHog key/host; SDK и consent flow пока не подключены. Live targets и их права проверяются отдельно в FP-04.
 
+## Миграционный baseline
+
+FP-03 предоставляет общий Drizzle runner и четыре отдельные SQL-роли. В `migrations/meta/_journal.json` пока нет доменных миграций: таблицы метрик и заявок появятся в DP/LM. Bootstrap выполняется аккаунтом, которому разрешено создавать роли; пароли задаются отдельно в secret store. После bootstrap `DATABASE_MIGRATION_URL` должен использовать `pkgcompass_migration_owner`, а не административный аккаунт.
+
+CLI получает настройки из окружения процесса; `.env.local` автоматически читает Next.js, но не эти Node-скрипты. Перед CLI запустить доверенный способ загрузки нужных переменных из secret store. Не передавать секретные URL в аргументах команд.
+
+```sh
+npm run db:bootstrap-roles -- --env fixture --dry-run
+npm run db:bootstrap-roles -- --env fixture --apply
+npm run db:migrate -- --env fixture --dry-run
+npm run db:migrate -- --env fixture --apply
+```
+
+`fixture` принимает только временный локальный PostgreSQL. Для development явно заменить среду на `--env development` и выбрать dev credentials. `--env` и режим обязательны; `APP_ENV`, если задан, должен совпадать. Для production также обязателен `--allow-production`, включая dry-run. Обработка ошибок выводит безопасный код без URL, SQL detail или credential. Известные Neon pooler hosts не подходят для migrations/collector; connection query допускает только проверенные SSL/channel-binding параметры.
+
+Web metrics reader и lead writer используют `pg.Pool`; migrations и collector — отдельный `pg.Client`, сохраняющий session lock. Runner проверяет порядок и hash применённой истории, сериализует apply и не создаёт историю в dry-run. Полные GRANT и запреты доступа к настоящим таблицам заявок проверяются после доменных миграций; текущий проход FP-03 их не закрывает.
+
+TypeScript connection factories в `src/server/db/` используют политику web-конфига. Migration CLI выбирает target отдельно через явный `--env` и CLI guards; будущий collector CLI в DP должен делать так же. Web factory с настройками по умолчанию в обычном CI не включает live-соединение; подставлять выдуманные Vercel/CI flags для обхода этой границы нельзя.
+
+Интеграционная проверка `npm run test:foundation-db:postgres` требует `DATABASE_TEST_URL` для отдельной loopback-базы `pkgcompass_fp03_review`. Она создаёт только синтетические временные объекты; на live targets её запуск запрещён. Обычный `npm test` без этого target явно пропускает SQL integration cases.
+
+При релизе сначала добавлять совместимую схему, затем код. Удаление или изменение данных — отдельная задача с подготовкой восстановления. Откат приложения не откатывает CMS, CRM или SQL.
+
+## Подключение development сервисов
+
+[Справочник регистраций и ключей](docs/setup/development-services.md) описывает Sanity development dataset, Neon dev branch, Brevo dev list, PostHog EU project и подготовку GitHub/Vercel. В нём разделены публичные identifiers, provider credentials и самостоятельно генерируемые секреты, указаны места хранения и официальные источники условий сервисов.
+
+Публичные условия сверены 5 октября 2026. Development credentials настроены локально: проверены вход четырёх Neon ролей и read-only Brevo list/attributes. Next.js Preview готов; branch-specific переменные настроены владельцем. Фактические квоты, retention и live adapters ещё не проверены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена. Live smoke выполняется после CW/DP/LM схем и SQL GRANT.
+
 ## Документы и результаты
 
 | Путь | Назначение |
@@ -68,8 +98,9 @@ Fixtures находятся в `src/server/fixtures/`, порты — в `src/do
 | [docs/README.md](docs/README.md) | Контракты v1 и приоритет решений |
 | [docs/14-core-development-plan.md](docs/14-core-development-plan.md) | Порядок исполнения и пять детальных планов |
 | [docs/work/tasks.md](docs/work/tasks.md) | Текущие статусы 44 задач |
+| [docs/setup/development-services.md](docs/setup/development-services.md) | Регистрации, dev targets, API-ключи, локальные секреты и ограничения сервисов |
 | [docs/work/journal/](docs/work/journal/README.md) | Очищенная история работы по дням |
 | [artifacts/README.md](artifacts/README.md) | Локальные evidence runs, формат и хранение |
 | [AGENTS.md](AGENTS.md) | Инструкции работы для следующих агентов |
 
-`main` — локальная исходная ветка; для задачи создавать ветку `work/<task-id>-<short-name>`. Первый проход выполняется в `work/foundation-first-pass`. Remote, hosting и внешний artifact storage пока не подключены. Все локальные artifacts/runs исключены из Git; это evidence storage, а не резервная копия приватных заявок.
+`main` — локальная исходная ветка; для задачи создавать ветку `work/<task-id>-<short-name>`. Первый проход выполняется в `work/foundation-first-pass`. GitHub remote и Vercel Preview подключены; внешний artifact storage пока не подключён. Все локальные artifacts/runs исключены из Git; это evidence storage, а не резервная копия приватных заявок.
