@@ -1,0 +1,40 @@
+# PkgCompass: реестр решений и старт реализации
+
+Дата: 5 октября 2026. Актуальная рамка — [ADR 0013](decisions/0013-marketing-v1-and-simple-pipeline.md). Открытых продуктовых/архитектурных решений, блокирующих начало реализации, нет. Это не подтверждение готовности приложения к релизу.
+
+## 1. Принятые решения
+
+| Решение | Источник |
+| --- | --- |
+| PkgCompass, каталог headless CMS, product отдельно от SDK/repository | ADR 0002 и 02 |
+| English-only v1, document-level content locale и /en/ URLs | ADR 0001/0008/0009 |
+| 5–8 CMS и 3–5 содержательных сравнений | ADR 0005/0006 и актуальный 0013 |
+| CMS/SEO/доступность + форма→CRM + consent/аналитика в v1 | ADR 0013, 02, 09, 10 |
+| AI-readiness: types/llmsTxt/MCP, 25/20/20, знаменатель65, manual review достаточен | ADR 0002/0013 и 07 |
+| Next.js, Sanity, Vercel Hobby, Neon PostgreSQL, Actions CLI | ADR 0003/0007/0010/0012 с уточнениями 0013 |
+| Ограниченный collector, один writer, snapshots без ledger/receipts/pointers/resume | ADR 0013 и 06 |
+| Brevo Contacts API, PostHog Cloud EU, accepted lead conversion | ADR 0013, 09, 10 |
+| Drizzle/migrations; Tailwind; Vitest/Playwright/axe/Lighthouse | 05; defaults реализации |
+| UI: светлый каталог с редакционными элементами | ADR 0011; макеты в реализации |
+| Изоляция dev/prod сразу, private lead state отдельно от public snapshots | 05/12 |
+| Retention: snapshots30d с fallback, leads30d, lead backups7d, analytics90d, reports14d | 06/09/10/12 |
+| Публичный репозиторий к портфолио-релизу, private development допустим; без secrets/PII | ADR 0013 |
+| Переводы, A/B, newsletter/DOI, агенты/расширения позже | 02/10 |
+
+Исторические ADR не отменяются целиком; заменённые пункты помечены и при конфликте уступают 0013. Реестр не создаёт вторую независимую спецификацию.
+
+## 2. Первая реализационная задача
+
+Детальный порядок исполнения, задачи и зависимости собраны в [плане ядра](14-core-development-plan.md) и его пяти разделах. Все задачи пока запланированы; первая — FP-01.
+
+Локальный Git-репозиторий, [рабочий реестр и журнал](work/README.md), [artifact storage](../artifacts/README.md) уже подготовлены. Это завершённая подготовительная работа; приложение/lockfile и полный FP-01 ещё предстоят. Remote и внешнее хранилище пока не подключены.
+
+Создать приложение/lockfile с совместимыми stable версиями; local/CI fixtures и временный PostgreSQL; development Sanity/Neon; схемы/миграции/seed. Проверить live mapping 3–5 CMS и сквозной CMS/preview/webhook путь. Параллельной независимой реализационной частью того же прототипа являются форма/Brevo и consent/PostHog, их не откладываем до полного каталога.
+
+Аккаунты/тарифы/ключи/host/list IDs, точные версии и API fixtures фиксируются при настройке. Нет необходимости повторно согласовывать framework, CRM, методологию или смысл конверсии. Если конкретный account требует оплату, подготовить конкретный вариант/цену и запросить разрешение на расход; не заявлять проверку выполненной без доступа.
+
+## 3. До публичного выпуска
+
+Production targets, origin (Vercel URL достаточен), contact владельца, quota/budget, live CMS/CRM/analytics smoke, Q01–Q19, isolated backup/restore и deletion, реальные команды в README. Подробная приёмка — [11](11-quality-plan.md); эксплуатация — [12](12-operations.md).
+
+Документационных блокеров нет; перечисленные проверки — обязательные задачи исполнения. Фактические ошибки/непройденные gates по-прежнему могут блокировать релиз. Нельзя заменить проверку аккаунтов фразой «без блокеров».

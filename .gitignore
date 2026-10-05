@@ -1,0 +1,36 @@
+# Local settings and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+.codex/
+.agents/
+
+# Dependencies and build/test output
+node_modules/
+.next/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+.playwright-cli/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+
+# Local evidence; only instructions and templates are versioned
+artifacts/runs/
+artifacts/.worklog.lock
+backups/
+*.dump
+*.sql.gz
+*.log
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
