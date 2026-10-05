@@ -12,11 +12,25 @@ export const configSettings = {
   content: ["SANITY_PROJECT_ID", "SANITY_DATASET", "SANITY_API_VERSION"],
   metricsReader: ["DATABASE_READ_URL"],
   metricsWriter: ["DATABASE_IMPORT_URL"],
+  leadWriter: ["DATABASE_LEAD_URL"],
+  databaseMigration: ["DATABASE_MIGRATION_URL"],
   crm: ["BREVO_API_KEY", "BREVO_REQUEST_LIST_ID"],
   measurement: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"],
 } as const;
 
 export type ConfigComponent = keyof typeof configSettings;
+type DatabaseConfigComponent =
+  | "metricsReader"
+  | "metricsWriter"
+  | "leadWriter"
+  | "databaseMigration";
+
+const databaseSettings: Record<DatabaseConfigComponent, string> = {
+  metricsReader: "DATABASE_READ_URL",
+  metricsWriter: "DATABASE_IMPORT_URL",
+  leadWriter: "DATABASE_LEAD_URL",
+  databaseMigration: "DATABASE_MIGRATION_URL",
+};
 
 export interface ComponentSettings {
   readonly content: {
@@ -26,6 +40,8 @@ export interface ComponentSettings {
   };
   readonly metricsReader: { readonly DATABASE_READ_URL: string };
   readonly metricsWriter: { readonly DATABASE_IMPORT_URL: string };
+  readonly leadWriter: { readonly DATABASE_LEAD_URL: string };
+  readonly databaseMigration: { readonly DATABASE_MIGRATION_URL: string };
   readonly crm: {
     readonly BREVO_API_KEY: string;
     readonly BREVO_REQUEST_LIST_ID: string;
@@ -78,19 +94,15 @@ function assertValidSettings<Component extends ConfigComponent>(
     return;
   }
 
-  if (component === "metricsReader" || component === "metricsWriter") {
-    const setting = component === "metricsReader" ? "DATABASE_READ_URL" : "DATABASE_IMPORT_URL";
-    try {
-      const url = new URL(values[setting] ?? "");
-      if (
-        !["postgres:", "postgresql:"].includes(url.protocol) ||
-        !url.hostname ||
-        !url.username ||
-        !url.password
-      ) invalid(setting);
-    } catch {
-      invalid(setting);
-    }
+  if (
+    component === "metricsReader" || component === "metricsWriter" ||
+    component === "leadWriter" || component === "databaseMigration"
+  ) {
+    const setting = databaseSettings[component as DatabaseConfigComponent];
+    if (!validDatabaseUrl(
+      values[setting] ?? "",
+      component === "metricsWriter" || component === "databaseMigration",
+    )) invalid(setting);
     return;
   }
 
@@ -122,6 +134,31 @@ function assertValidSettings<Component extends ConfigComponent>(
 
 function isSingleLineValue(value: string): boolean {
   return value.trim().length > 0 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function validDatabaseUrl(value: string, requiresDirectSession: boolean): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const isLoopback = ["localhost", "127.0.0.1", "::1"].includes(host);
+    const databaseName = url.pathname.slice(1);
+    const supportedParameters = new Map([
+      ["sslmode", new Set(["require", "verify-full"])],
+      ["channel_binding", new Set(["require", "prefer"])],
+    ]);
+    const hasUnsafeParameters = [...new Set(url.searchParams.keys())].some((key) => {
+      const values = url.searchParams.getAll(key);
+      const allowedValues = supportedParameters.get(key);
+      return !allowedValues || values.length !== 1 || !allowedValues.has(values[0]);
+    });
+
+    return ["postgres:", "postgresql:"].includes(url.protocol) &&
+      Boolean(host && url.username) && (Boolean(url.password) || isLoopback) &&
+      /^[A-Za-z0-9_.-]+$/.test(databaseName) && !url.hash &&
+      !(requiresDirectSession && host.includes("-pooler")) && !hasUnsafeParameters;
+  } catch {
+    return false;
+  }
 }
 
 function buildTarget<Component extends ConfigComponent>(
