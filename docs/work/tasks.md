@@ -4,8 +4,8 @@
 
 | ID | Задача / план | Статус | Последний run | Обновлено UTC |
 | --- | --- | --- | --- | --- |
-| FP-01 | [Воспроизводимый каркас приложения](../plans/01-foundation.md) | review | 20261005T153202Z-FP-01-1fb6ede3 | 2026-10-05T15:47:51Z |
-| FP-02 | [Targets, конфигурация и автономные fixtures](../plans/01-foundation.md) | planned | — | — |
+| FP-01 | [Воспроизводимый каркас приложения](../plans/01-foundation.md) | verified | 20261005T155307Z-FP-01-371d7ac7 | 2026-10-05T15:58:20Z |
+| FP-02 | [Targets, конфигурация и автономные fixtures](../plans/01-foundation.md) | verified | 20261005T175712Z-FP-02-acc2ccc3 | 2026-10-05T18:00:47Z |
 | FP-03 | [Базовые миграции, connections и SQL-права](../plans/01-foundation.md) | planned | — | — |
 | FP-04 | [Development аккаунты и проверенные live adapters](../plans/01-foundation.md) | planned | — | — |
 | FP-05 | [Единый вертикальный прототип и пересчёт](../plans/01-foundation.md) | planned | — | — |

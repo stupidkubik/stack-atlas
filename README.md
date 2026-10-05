@@ -9,7 +9,7 @@
 3. Создать запись работы: `python3 scripts/worklog.py start FP-01 --summary "Начало каркаса приложения"`.
 4. Добавлять результаты проверок и завершить запись по [рабочему процессу](docs/work/README.md).
 
-Для рабочего журнала нужен Python 3.9+ (standard library, macOS/Linux). Команды приложения и результаты проверки воспроизводимости добавляются ниже по завершении FP-01. CI относится к QA-01.
+Для рабочего журнала нужен Python 3.9+ (standard library, macOS/Linux). Проверенные команды приложения приведены ниже. CI относится к QA-01.
 
 ## Версии foundation
 
@@ -43,7 +43,23 @@ npm run start
 
 `npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-01; live Studio smoke ещё не выполнен.
 
-Vitest и Playwright настроены. До появления сценариев пустой запуск `test` / `test:e2e` не считается пройденной проверкой. Для E2E требуется `PKGCOMPASS_RUN_ID` текущего run: traces сохраняются в его `evidence/playwright/`. Отчёты не размещаются в tracked files.
+`npm run test` проверяет foundation config, synthetic fixtures, safe projections и отказные сценарии adapters. Playwright настроен для будущих E2E; пустой запуск `test:e2e` не считается пройденной проверкой. Для E2E требуется `PKGCOMPASS_RUN_ID` текущего run: traces сохраняются в его `evidence/playwright/`. Отчёты не размещаются в tracked files. `next-env.d.ts` создаётся `next typegen` перед проверкой типов и исключён из Git.
+
+## Targets и автономный режим
+
+`APP_ENV` выбирает `fixture`, `development` или `production` для всех компонентов. Локальный запуск без выбранной среды и обычный CI используют fixtures. Явный local `development` предназначен для будущего dev smoke; web config допускает `production` только в Vercel production. Trusted preview требует `development`. PR preview по умолчанию использует fixtures; владелец deployment может явно отметить проверенный preview через `PKGCOMPASS_TRUSTED_PREVIEW=true` в настройках Vercel. Этот флаг не берётся из PR payload. Явный untrusted context сохраняет fixture mode. Provisioning относится к FP-04.
+
+Проверка каждого компонента требует только его настройки; ошибка SQL не скрывает редакционный контент. Неверная live-конфигурация возвращает безопасную ошибку, а незавершённый live adapter — `adapter_unavailable`.
+
+| Компонент | Fixture | Development / production |
+| --- | --- | --- |
+| CMS | Пять synthetic CMS, нейтральный draft marker, пара и AI-review inputs | `SANITY_PROJECT_ID`, `SANITY_DATASET` (имя совпадает с APP_ENV), `SANITY_API_VERSION` |
+| Metrics read | Synthetic npm/GitHub ответы | `DATABASE_READ_URL` |
+| Metrics write | Fake writer | `DATABASE_IMPORT_URL` |
+| CRM | Fake с счётчиком accepted, без сохранения email | `BREVO_API_KEY`, `BREVO_REQUEST_LIST_ID` |
+| Measurement | Stub с явным event/ID allowlist | `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` (EU) |
+
+Fixtures находятся в `src/server/fixtures/`, порты — в `src/domain/ports.ts`, выбор targets — в `src/server/config/`. Они помечены synthetic и не подтверждают данные поставщиков. Public config возвращает только среду и публичные PostHog key/host; SDK и consent flow пока не подключены. Live targets и их права проверяются отдельно в FP-04.
 
 ## Документы и результаты
 
