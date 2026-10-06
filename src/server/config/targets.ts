@@ -16,6 +16,12 @@ export const configSettings = {
   databaseMigration: ["DATABASE_MIGRATION_URL"],
   crm: ["BREVO_API_KEY", "BREVO_REQUEST_LIST_ID"],
   measurement: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"],
+  preview: ["SANITY_PREVIEW_READ_TOKEN", "PREVIEW_SESSION_SECRET"],
+  seed: ["SANITY_SEED_WRITE_TOKEN"],
+  webhook: ["SANITY_WEBHOOK_SECRET"],
+  importInvalidation: ["IMPORT_INVALIDATION_SECRET"],
+  leadSecurity: ["LEAD_HMAC_SECRET", "SITE_URL"],
+  daily: ["CRON_SECRET", "GITHUB_DISPATCH_TOKEN", "GITHUB_ACTIONS_REPOSITORY", "GITHUB_ACTIONS_REF"],
 } as const;
 
 export type ConfigComponent = keyof typeof configSettings;
@@ -50,6 +56,12 @@ export interface ComponentSettings {
     readonly NEXT_PUBLIC_POSTHOG_KEY: string;
     readonly NEXT_PUBLIC_POSTHOG_HOST: string;
   };
+  readonly preview: { readonly SANITY_PREVIEW_READ_TOKEN: string; readonly PREVIEW_SESSION_SECRET: string };
+  readonly seed: { readonly SANITY_SEED_WRITE_TOKEN: string };
+  readonly webhook: { readonly SANITY_WEBHOOK_SECRET: string };
+  readonly importInvalidation: { readonly IMPORT_INVALIDATION_SECRET: string };
+  readonly leadSecurity: { readonly LEAD_HMAC_SECRET: string; readonly SITE_URL: string };
+  readonly daily: { readonly CRON_SECRET: string; readonly GITHUB_DISPATCH_TOKEN: string; readonly GITHUB_ACTIONS_REPOSITORY: string; readonly GITHUB_ACTIONS_REF: string };
 }
 
 export type FixtureTarget<Component extends ConfigComponent = ConfigComponent> = {
@@ -84,6 +96,30 @@ function assertValidSettings<Component extends ConfigComponent>(
   environment: LiveEnvironment,
   values: Record<string, string>,
 ): asserts values is Record<keyof ComponentSettings[Component] & string, string> {
+  for (const setting of configSettings[component]) {
+    if (!isSingleLineValue(values[setting] ?? "")) invalid(setting);
+  }
+  const generatedSecrets = ["PREVIEW_SESSION_SECRET", "SANITY_WEBHOOK_SECRET", "IMPORT_INVALIDATION_SECRET", "LEAD_HMAC_SECRET", "CRON_SECRET"];
+  for (const setting of generatedSecrets) {
+    if (setting in values && values[setting].length < 32) invalid(setting);
+  }
+  if (component === "daily") {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(values.GITHUB_ACTIONS_REPOSITORY)) invalid("GITHUB_ACTIONS_REPOSITORY");
+    const ref = values.GITHUB_ACTIONS_REF;
+    if (!/^[A-Za-z0-9][A-Za-z0-9_./-]{0,199}$/.test(ref) || ref.includes("..") || ref.includes("//") || ref.endsWith("/") || ref.endsWith(".") || ref.endsWith(".lock")) invalid("GITHUB_ACTIONS_REF");
+    return;
+  }
+  if (component === "leadSecurity") {
+    try {
+      const origin = new URL(values.SITE_URL);
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
+      if (origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/" ||
+        (origin.protocol !== "https:" && !(environment === "development" && local && origin.protocol === "http:"))) invalid("SITE_URL");
+    } catch {
+      invalid("SITE_URL");
+    }
+    return;
+  }
   if (component === "content") {
     if (!/^[-a-z0-9]+$/i.test(values.SANITY_PROJECT_ID ?? "")) invalid("SANITY_PROJECT_ID");
     if (

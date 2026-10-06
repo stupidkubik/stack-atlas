@@ -1,5 +1,34 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791273600000,
+      "tag": "0001_metrics_current",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791273601000,
+      "tag": "0002_lead_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791273602000,
+      "tag": "0003_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791273603000,
+      "tag": "0004_app_role_grants",
+      "breakpoints": true
+    }
+  ]
 }

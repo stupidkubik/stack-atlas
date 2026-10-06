@@ -27,9 +27,14 @@
     "studio:build": "sanity build"
   },
   "dependencies": {
+    "@sanity/client": "8.9.0",
+    "@sanity/preview-url-secret": "4.1.5",
+    "@sanity/webhook": "4.0.4",
     "drizzle-orm": "0.45.3",
     "next": "16.3.8",
+    "next-sanity": "13.3.4",
     "pg": "8.23.1",
+    "posthog-js": "1.436.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "0.0.1",

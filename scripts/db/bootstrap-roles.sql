@@ -94,7 +94,8 @@ END
 $check_role_memberships$;
 
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-GRANT USAGE, CREATE ON SCHEMA public TO pkgcompass_migration_owner;
+GRANT USAGE ON SCHEMA public TO pkgcompass_migration_owner WITH GRANT OPTION;
+GRANT CREATE ON SCHEMA public TO pkgcompass_migration_owner;
 
 DO $migration_database_access$
 BEGIN

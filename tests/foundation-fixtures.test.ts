@@ -163,7 +163,10 @@ describe("foundation synthetic catalog fixtures", () => {
     expect(syntheticNpmFullPeriodResponse.downloads).toHaveLength(30);
     expect(syntheticNpmIncompletePeriodResponse.downloads.length)
       .toBeLessThan(syntheticNpmFullPeriodResponse.downloads.length);
-    expect(syntheticGitHubRepositoryResponse.html_url).toContain("example.invalid");
+    expect(syntheticGitHubRepositoryResponse.fixtureLabel).toContain("synthetic");
+    expect(syntheticGitHubRepositoryResponse.html_url).toBe(
+      `https://github.com/${syntheticGitHubRepositoryResponse.full_name}`,
+    );
     expect(syntheticGitHubRepositoryResponse.stargazers_count).toBe(0);
   });
 });

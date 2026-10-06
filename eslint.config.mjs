@@ -21,6 +21,7 @@ export default defineConfig([
     ".next/**",
     "node_modules/**",
     "out/**",
+    "dist/**",
     "build/**",
     "artifacts/**",
   ]),
