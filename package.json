@@ -18,6 +18,10 @@
     "test:foundation-db:postgres": "node scripts/db/test-postgres.mjs",
     "db:bootstrap-roles": "node scripts/db/bootstrap-roles.mjs",
     "db:migrate": "node scripts/db/migrate.mjs",
+    "dev:check:sanity": "node scripts/dev/sanity-read-smoke.mjs",
+    "dev:check:neon": "node scripts/dev/inventory-neon-roles.mjs",
+    "dev:check:brevo": "node scripts/dev/brevo-smoke.mjs",
+    "dev:check:brevo-contact": "node scripts/dev/brevo-contact-smoke.mjs",
     "test:e2e": "playwright test",
     "studio": "sanity dev",
     "studio:build": "sanity build"

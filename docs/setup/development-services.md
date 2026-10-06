@@ -1,6 +1,6 @@
 # PkgCompass: development services and credentials
 
-Справочник подготовки dev targets для FP-04. Срез официальных публичных документов проверен **5 октября 2026**. Публичные документы не подтверждают условия конкретного аккаунта. Фактические тарифы, остатки квот, региональные опции и retention остаются **unverified**; выполненные provisioning checks перечислены в разделе «Что сейчас реально готово». Владелец должен сверить экран Plan/Usage своего аккаунта и записать дату и только безопасные идентификаторы.
+Справочник подготовки dev targets для FP-04. Срез официальных публичных документов проверен **5 октября 2026**. Публичные документы не подтверждают условия конкретного аккаунта. В текущем проходе прочитаны авторизованные Plan/Usage экраны; подтверждённые параметры перечислены в разделе «Проверенные параметры аккаунтов». Retention и runtime smoke отмечаются отдельно и не считаются проверенными по одному тарифу.
 
 ## Что подготовить сейчас и что отложить
 
@@ -13,7 +13,7 @@
 | Brevo | Dev requests list в отдельном dev account или изолированном account | Только три атрибута из 09; ни одна campaign/automation не использует этот список |
 | PostHog | Cloud **EU**, отдельный development project | `https://eu.i.posthog.com`; consent-only SDK и только разрешённые события из 10 |
 
-GitHub remote/Actions и Vercel project нужны к проверке trusted preview и ежедневного dispatch; сейчас в репозитории remote и подключённые live targets не подтверждены. Их следует подготовить до соответствующего FP-04 smoke. Custom domain не требуется: сгенерированный Vercel URL достаточен как origin. Production Sanity dataset/Neon branch/Brevo list/PostHog project, production credentials и домен относятся к подготовке release, не к началу dev-работы.
+GitHub remote и Vercel project подключены; ежедневный Actions workflow пока отсутствует. Custom domain не требуется: сгенерированный Vercel URL достаточен как origin. Наличие production dataset/branch не подтверждает release readiness; production credentials и release smoke относятся к подготовке выпуска.
 
 Ниже — owner handoff, а не отчёт о регистрации: никакие аккаунты или ресурсы здесь не создавались и условия сервисов за владельца не принимались.
 
@@ -100,15 +100,28 @@ Generated secrets создавать криптографическим гене
 
 ## Что сейчас реально готово
 
-На 2026-10-05 development credentials сохранены владельцем в ignored `.env.local`; `.env.example` содержит только шаблон. Проверены согласованность Sanity development settings и локальный запуск Studio, authentication четырёх Neon ролей, read-only Brevo list и три ожидаемых contact attributes. Эти проверки не подтверждают editing flow, table grants или отправку заявок. PostHog EU settings заполнены; SDK/consent и actual event retention ещё не проверены.
+Development credentials сохранены владельцем в ignored `.env.local`; `.env.example` содержит только шаблон. В проходе 2026-10-05–06 подготовлены воспроизводимые dev CLI: Sanity anonymous published и authenticated preview aggregate reads, authentication четырёх Neon ролей, Brevo list/attributes и отдельный smoke контакта владельца через настоящий CRM adapter. Выполненные проверки и ограничения указаны в текущем run FP-04. Они не подтверждают editing flow, table grants или форму заявки. PostHog EU settings заполнены; SDK/consent и actual event retention ещё не проверены.
 
 GitHub remote подключён. Next.js Vercel Preview ветки `work/foundation-first-pass` имеет статус READY. Владелец исправил branch-specific Preview переменные; metadata подтверждает их scope, секретные значения и поведение runtime адаптеров не проверены. Function region сейчас `iad1`; выбор региона нужно согласовать до live data flows.
 
 Bootstrap поддерживает PostgreSQL 16+ ADMIN-only membership создателя роли и ограниченного администратора Neon. Новые SQL-роли создаются без паролей: сначала задать пароль через административное SQL-соединение и сохранить его только в secret store; Reset password в кабинете может не работать до первоначального назначения. Для migration owner временное SET ROLE разрешение снимается после настройки default privileges. Выполнять весь bootstrap в одной транзакции, обычным Run, без Explain и без выделения части DO-блока.
 
-Live selection в `src/server/config/targets.ts` валидирует настройки; connection factories и migration runner подготовлены. Доменные migrations, точные grants и provider adapters остаются задачами CW/DP/LM. Generated secrets и GitHub dispatch token можно заполнить при появлении их consumers. Vercel Cron автоматически запускается только для Production; Preview dev smoke будущего защищённого handler выполняется вручную. Полный FP-04 остаётся незавершённым до сквозных live smoke и подтверждения квот/retention.
+Live selection в `src/server/config/targets.ts` валидирует настройки, включая запрет personal PostHog key в публичной конфигурации; connection factories и migration runner подготовлены. CRM adapter и Sanity read smoke подготовлены; доменные migrations, точные grants и runtime consumers остаются задачами CW/DP/LM. Generated secrets и GitHub dispatch token можно заполнить при появлении их consumers. Vercel Cron автоматически запускается только для Production; Preview dev smoke будущего защищённого handler выполняется вручную. Полный FP-04 остаётся незавершённым до сквозных live smoke и подтверждения retention. Account quotas в этом проходе проверены отдельно через UI; динамический usage не является бессрочной гарантией бесплатности.
 
 ## Официальные источники по квотам
+
+### Проверенные параметры аккаунтов
+
+Read-only проверка авторизованных экранов выполнена 2026-10-05. Очищенное evidence хранится в run `20261005T213908Z-FP-04-5e2c90d6`; сырые DOM, screenshots с данными аккаунта и credentials не сохранялись. Usage counters могут обновляться с задержкой.
+
+| Аккаунт / target | Подтверждено через UI | Осталось |
+| --- | --- | --- |
+| Sanity `qrv3qhw1` | Growth Trial $0, 30 дней до автоматического Free; development и production public, 2/2 datasets; 1/2 webhooks; 0/10k documents; API 3/250k, CDN 0/1m, bandwidth 632 B/100 GB | Не использовать trial-only permissions/private features как основу Free v1. Residency, preview/publisher/webhook runtime — отдельные проверки |
+| Neon PkgCompass | Free $0/month, Frankfurt `eu-central-1`; development отмечена Schema-only; 2 ветки. На проект: 1 GB, 100 compute hours, 10 branches, autoscale 2 CU | Доменные migrations и реальные object GRANT после DP/LM |
+| Brevo | Free; 300 sends remaining; экраны Campaigns и Automations пустые | Отправки не используются; API smoke и retention проверяются отдельно |
+| PostHog project `295214` | PkgCompass development, EU application; analytics current 0, allowance и billing limit 1M events; discard client IP включён | Окно 90 дней ещё не подтверждено; consent-only SDK и dashboard smoke требуют LM |
+| Vercel pkg-compass | Hobby; Next.js Preview READY; production main пока содержит документацию; fast transfer 551.82 kB/100 GB в отображаемом периоде Sep 5–Oct 5 | Runtime Preview, Cron/dispatch требуют handlers/workflow. Регион функции `iad1` пока не изменён |
+| GitHub stupidkubik/stack-atlas | Public; Actions доступен, показывает каталог первоначальной настройки workflows | `daily` отсутствует на default branch; dispatch not_run. Платные runners/features не выбирались; расходов/upgrade не выполняли |
 
 Страницы тарифов меняются. Для отчёта FP-04 фиксировать дату просмотра и account-specific Plan/Usage page, не считать нижеследующие публичные значения подтверждением персонального аккаунта.
 
@@ -117,6 +130,6 @@ Live selection в `src/server/config/targets.ts` валидирует настр
 | Sanity | Free: 2 public-only datasets; ресурсы помесячно UTC, hard caps могут блокировать API/CDN | Project Plan/Usage quotas, использование документов/assets/API/CDN/bandwidth; нет ли trial/private features |
 | Neon | Free update 2026-10-02: 100 projects, 100 CU-hours/project/month, 1 GB/project, 10 branches, autoscale up to 2 CU | Plan, доступность Frankfurt и schema-only branch, фактическое storage/compute/branch usage, billing state |
 | Brevo | Free docs: 100k contacts, 200 contact attributes, 300 lists, 300 email sends/day; endpoint/account API limits см. заголовки | Account plan, контакты/атрибуты/lists и текущие API limit headers; отправки остаются отключены |
-| PostHog | Public pricing/docs: 1M events/month on free tier; EU Cloud region | Cloud region, monthly event allowance, фактическое retention window и возможность 90 дней |
+| PostHog | Public pricing/docs: 1M events/month on free tier, event retention 1 year; [retention API](https://posthog.com/docs/api/events-retention) read-only и определяется plan | Фактическое account window и возможность 90 дней; при недоступности — ежемесячная очистка по spec 10 до release |
 | Vercel | Hobby: personal/non-commercial; cron at most daily, ±59 min; one selected function region | Eligibility/use, Cron enabled, function region, monthly included resource usage |
 | GitHub Actions | Standard hosted runner minutes free for public repos; private repos use plan allowance then billable | Repository visibility, account plan, billing budget/usage and workflow availability |

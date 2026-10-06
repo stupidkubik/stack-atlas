@@ -89,7 +89,23 @@ TypeScript connection factories в `src/server/db/` используют пол�
 
 [Справочник регистраций и ключей](docs/setup/development-services.md) описывает Sanity development dataset, Neon dev branch, Brevo dev list, PostHog EU project и подготовку GitHub/Vercel. В нём разделены публичные identifiers, provider credentials и самостоятельно генерируемые секреты, указаны места хранения и официальные источники условий сервисов.
 
-Публичные условия сверены 5 октября 2026. Development credentials настроены локально: проверены вход четырёх Neon ролей и read-only Brevo list/attributes. Next.js Preview готов; branch-specific переменные настроены владельцем. Фактические квоты, retention и live adapters ещё не проверены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена. Live smoke выполняется после CW/DP/LM схем и SQL GRANT.
+Публичные условия и авторизованные account Plan/Usage экраны сверены 5 октября 2026; результаты и ограничения — в [development services](docs/setup/development-services.md#проверенные-параметры-аккаунтов). Development credentials настроены локально. Проверены вход четырёх Neon ролей и read-only Sanity published/preview API; каталог пока пуст. Next.js Preview готов; branch-specific переменные настроены владельцем. Окно PostHog retention 90 дней и сквозные runtime paths ещё не подтверждены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена.
+
+### Проверки dev targets
+
+Локальные проверки требуют явного target; они читают ignored `.env.local` и выводят только безопасные codes/counts. Не запускать их в CI/untrusted PR или на production. API smoke выполняется последовательно в общем dev namespace. Fixture-тесты `npm test` не запускают эти live проверки: их opt-in cases явно skipped.
+
+```sh
+npm run dev:check:sanity -- --env development
+npm run dev:check:neon -- --env development
+npm run dev:check:brevo -- --env development
+```
+
+Sanity проверяет aggregate counts с published perspective и preview token, без чтения текстов drafts. Это проверка target/API, не publisher/preview UI или mapping 3–5 CMS. Neon выполняет только SELECT identity четырёх ролей; проверка прав будущих таблиц требует migrations/GRANT из DP/LM и второго прохода FP-03. Brevo read-only smoke проверяет dev requests list и три атрибута.
+
+`npm run dev:check:brevo-contact -- --env development` — отдельная **write**-проверка только с выделенным alias владельца из локальной `FP04_TEST_EMAIL`, который не используется в production. Если контакт уже существует, проверка отказывается его менять. Созданный проверкой контакт проверяется через настоящий adapter upsert/repeat и удаляется с подтверждением очистки. Emails/campaigns не отправляются. Alias не добавлять в tracked файлы, command line, fixture, журнал или reports; после smoke убрать его из локального файла, когда он больше не нужен.
+
+CRM entry point `createCrmContacts` в `src/server/crm/` выбирает fake или Brevo по server config. Общий foundation selector пока сохраняет unavailable для незавершённых runtime компонентов; подключение API формы относится к LM. Полный FP-04 DoD требует live publisher/preview/collector/CRM/consent-analytics paths, доменных grants и dispatch consumers; успешный provisioning smoke их не заменяет.
 
 ## Документы и результаты
 
