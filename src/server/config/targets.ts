@@ -116,7 +116,8 @@ function assertValidSettings<Component extends ConfigComponent>(
   }
 
   if (component === "measurement") {
-    if (!isSingleLineValue(values.NEXT_PUBLIC_POSTHOG_KEY ?? "")) {
+    const projectKey = values.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+    if (!isSingleLineValue(projectKey) || projectKey.startsWith("phx_")) {
       invalid("NEXT_PUBLIC_POSTHOG_KEY");
     }
     try {
@@ -155,6 +156,7 @@ function validDatabaseUrl(value: string, requiresDirectSession: boolean): boolea
     return ["postgres:", "postgresql:"].includes(url.protocol) &&
       Boolean(host && url.username) && (Boolean(url.password) || isLoopback) &&
       /^[A-Za-z0-9_.-]+$/.test(databaseName) && !url.hash &&
+      (isLoopback || ["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "")) &&
       !(requiresDirectSession && host.includes("-pooler")) && !hasUnsafeParameters;
   } catch {
     return false;

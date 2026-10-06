@@ -162,6 +162,15 @@ describe("independent FP-03 boundary probes", () => {
     const loopbackUrl = "postgresql://fixture_admin@127.0.0.1:55437/pkgcompass_fp03_review";
     expect(validatePostgresUrl(loopbackUrl)).toBe(loopbackUrl);
     expect(() => validatePostgresUrl(
+      "postgresql://migration_owner:private@db.example.invalid/pkgcompass?channel_binding=require",
+    )).toThrow();
+    expect(validatePostgresUrl(
+      "postgresql://migration_owner:private@db.example.invalid/pkgcompass?sslmode=require",
+    )).toContain("sslmode=require");
+    expect(validatePostgresUrl(
+      "postgresql://migration_owner:private@db.example.invalid/pkgcompass?sslmode=verify-full",
+    )).toContain("sslmode=verify-full");
+    expect(() => validatePostgresUrl(
       `postgresql://fixture_admin:${passwordSentinel}@ep-review-pooler.example.invalid/pkgcompass_fp03_review`,
     )).toThrow();
     expect(() => validatePostgresUrl(

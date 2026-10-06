@@ -106,7 +106,9 @@ export function validatePostgresUrl(value, setting = "DATABASE_MIGRATION_URL") {
       !url.username ||
       (!url.password && !localHosts.includes(normalizedHost)) ||
       !/^[A-Za-z0-9_.-]+$/.test(databaseName) ||
-      url.hash || normalizedHost.includes("-pooler") || hasUnsafeParameters
+      url.hash ||
+      (!localHosts.includes(normalizedHost) && !["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "")) ||
+      normalizedHost.includes("-pooler") || hasUnsafeParameters
     ) {
       throw new Error("invalid");
     }

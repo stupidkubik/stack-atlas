@@ -117,6 +117,27 @@ describe("component environment and target selection", () => {
       DATABASE_READ_URL: "not-a-database-url",
     })).toThrow("DATABASE_READ_URL");
 
+    const databaseTargets = [
+      ["metricsReader", "DATABASE_READ_URL"],
+      ["metricsWriter", "DATABASE_IMPORT_URL"],
+      ["leadWriter", "DATABASE_LEAD_URL"],
+      ["databaseMigration", "DATABASE_MIGRATION_URL"],
+    ] as const;
+    for (const [component, setting] of databaseTargets) {
+      expect(() => selectComponentTarget(component, {
+        APP_ENV: "development",
+        [setting]: "postgresql://role:secret@db.example.invalid/metrics",
+      })).toThrow(setting);
+      expect(selectComponentTarget(component, {
+        APP_ENV: "development",
+        [setting]: "postgresql://role:secret@db.example.invalid/metrics?sslmode=require",
+      })).toMatchObject({ mode: "live", component });
+      expect(selectComponentTarget(component, {
+        APP_ENV: "development",
+        [setting]: "postgresql://role@127.0.0.1:5432/metrics",
+      })).toMatchObject({ mode: "live", component });
+    }
+
     expect(() => selectComponentTarget("crm", {
       APP_ENV: "development",
       BREVO_API_KEY: "secret key\nwith newline",
@@ -128,6 +149,20 @@ describe("component environment and target selection", () => {
       NEXT_PUBLIC_POSTHOG_KEY: "public-key",
       NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com/path?x=1",
     })).toThrow("NEXT_PUBLIC_POSTHOG_HOST");
+
+    expect(() => selectComponentTarget("measurement", {
+      APP_ENV: "development",
+      NEXT_PUBLIC_POSTHOG_KEY: "phx_personal-key-sentinel",
+      NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+    })).toThrow("NEXT_PUBLIC_POSTHOG_KEY");
+  });
+
+  it("never exports a PostHog personal API key through the public runtime config", () => {
+    expect(() => publicRuntimeConfig({
+      APP_ENV: "development",
+      NEXT_PUBLIC_POSTHOG_KEY: "phx_personal-key-sentinel",
+      NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+    })).toThrow("NEXT_PUBLIC_POSTHOG_KEY");
   });
 
   it("returns no internal settings from the public runtime config", () => {
