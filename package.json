@@ -22,6 +22,7 @@
     "dev:check:neon": "node scripts/dev/inventory-neon-roles.mjs",
     "dev:check:brevo": "node scripts/dev/brevo-smoke.mjs",
     "dev:check:brevo-contact": "node scripts/dev/brevo-contact-smoke.mjs",
+    "dev:check:posthog-live": "node --import=tsx scripts/dev/posthog-live-smoke.mjs",
     "collect": "node --conditions=react-server --import=tsx scripts/collect.ts",
     "test:e2e": "playwright test",
     "studio": "sanity dev",
