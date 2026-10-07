@@ -23,7 +23,7 @@ function review(mappingKey: string, kinds: { types: "bundled" | "external" | "no
     }],
   });
   return {
-    id: `ai_review.${product}`,
+    id: `ai_review_${product}`,
     productId: product,
     state: "published",
     mappingKey,
@@ -47,6 +47,10 @@ describe("published AI readiness", () => {
   };
 
   it("calculates the fixed denominator and half-up score for complete reviews", () => {
+    expect(calculateAiReadiness({
+      ...base,
+      publishedReview: review(mappingKey, { types: "bundled", llmsTxt: false, mcp: false }),
+    }).score).toBe(38);
     expect(calculateAiReadiness({
       ...base,
       publishedReview: review(mappingKey, { types: "bundled", llmsTxt: true, mcp: false }),

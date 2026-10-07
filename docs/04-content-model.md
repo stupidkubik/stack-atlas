@@ -6,12 +6,14 @@
 
 ## 1. Общие правила
 
-- Все ID стабильны и не зависят от локали, названия, slug, внешнего аккаунта или версии пакета. Используем opaque ID с префиксом сущности; значения создаются один раз в seed. Sanity published _id = domain id, _ref = published _id; draft имеет стандартный drafts.<id>. ID локализованного контента = content.<type>.<entityId>.<locale>, page = page.<pageKey>.<locale>; aiReview = ai_review.<productId>.
+- ID сущностей product/package/repository/category/comparison стабильны и не зависят от локали, названия, slug, внешнего аккаунта или версии пакета. Локализованный document ID стабилен для пары сущность + locale. Используем opaque ID с префиксом сущности; значения создаются один раз в seed. Sanity published _id = domain id, _ref = published _id; draft имеет стандартный drafts.<id>. ID локализованного контента = content_<type>_<entityId>_<locale>, page = page_<pageKey>_<locale>; aiReview = ai_review_<productId>; singleton siteSettings = siteSettings_default. Published ID не содержит точек.
 - `routeSlug` — редакционный lowercase slug, рабочий формат `[a-z0-9]+(?:-[a-z0-9]+)*`; уникален в пределах типа маршрута. Для сравнения запрещён разделитель `-vs-` внутри slug продукта, чтобы маршрут разбирался однозначно.
 - `packageName` хранится точно, включая `@scope/name`; нормализация для поиска не меняет исходное имя. Переименование пакета не меняет ID продукта и URL.
 - Времена — ISO 8601 UTC; период метрики хранится явно. Локаль контента v1 — `en`. Пустое значение, ноль и неизвестность различаются.
 - Внешние URLs — проверяемые HTTP(S); ссылки на ресурсы, доказательства и редакционные источники имеют понятную подпись. В публичном dataset нет секретов, персональных данных и приватных редакционных заметок.
 - Массивы references не содержат повторов. Ссылки не ведут на удалённые документы; снятие публикации проверяется на входящие публичные references.
+
+Техническое уточнение 6 октября 2026: [Sanity IDs and paths](https://www.sanity.io/docs/content-lake/ids) ограничивает анонимный доступ ко всем `_id` с точкой, даже после публикации в public dataset. Поэтому public document IDs используют root path без точек; private `drafts.<id>` / `versions.<release>.<id>` сохраняют стандартные префиксы Sanity. Исправление разделителя не меняет product/package/repository IDs, URL, локализацию или владельца контента. Старые dotted IDs созданных development fixtures не являются совместимым public identity и не используются новым public/preview projection.
 
 ## 2. Сущности и поля
 
@@ -30,7 +32,7 @@
 | `page` | `id*`, `pageKey*`, `locale*`, `title*`, `sections*`, `seo*` | Редактор; v1 pageKey=`home` / `aiMethodology` / `privacy`; уникальны pageKey+locale |
 | `siteSettings` | `id*`, `siteName*`, `defaultLocale*`, `activeLocales*`, `navigation*`, `footerLinks*` | Редактор; в v1 defaultLocale=en, activeLocales=[en]; ссылки через route resolver, не произвольные строки маршрутов |
 | `redirect` | `id*`, `sourcePath*`, `targetPath*`, `statusCode*` (=308), `createdAt*`, `reason*` | Контролируемое изменение slug; уникальный sourcePath, нет циклов и цепочек |
-| `aiReview` | id=ai_review.<productId>, productId, mappingKey, methodologyVersion, signals, reviewedAt, reviewerLabel, overrideReason?, previousFinding? | Редактор; публичный read layer читает опубликованный review и считает балл по 07; в БД не копируется |
+| `aiReview` | id=ai_review_<productId>, productId, mappingKey, methodologyVersion, signals, reviewedAt, reviewerLabel, overrideReason?, previousFinding? | Редактор; публичный read layer читает опубликованный review и считает балл по 07; в БД не копируется |
 | `metrics_current` | productId, source, metric, идентичность источника, последняя попытка, последнее валидное значение с датой/периодом, ряд по дням | PostgreSQL, контракт 06; не Sanity document |
 
 Read model вычисляется запросами. Отчёт run — CLI/CI artifact. Заявки и rate limits хранятся в PostgreSQL без email, их схема и права — [09](09-lead-form.md); никогда не Sanity documents.
@@ -131,7 +133,7 @@ Studio-валидация помогает редактору, но не зам�
 
 ```json
 {
-  "id": "content.product.prd_01.en", "productId": "prd_01", "locale": "en",
+  "id": "content_product_prd_01_en", "productId": "prd_01", "locale": "en",
   "summary": "A headless CMS for structured website content.",
   "useCases": ["Content-driven websites"],
   "fitsWhen": ["Editors need reusable structured content."],
@@ -167,7 +169,7 @@ Studio-валидация помогает редактору, но не зам�
 
 ```json
 {
-  "id": "content.comparison.cmp_01.en", "comparisonId": "cmp_01", "locale": "en",
+  "id": "content_comparison_cmp_01_en", "comparisonId": "cmp_01", "locale": "en",
   "title": "Example CMS vs Other CMS for an editorial website",
   "taskContext": "A small team needs a structured publishing workflow.",
   "criteria": [{"key":"deployment","label":"Deployment responsibilities","cells":[

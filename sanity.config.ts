@@ -19,7 +19,8 @@ export default defineConfig({
       previewUrl: {
         initial: `${previewOrigin}/en/`,
         previewMode: {
-          enable: "/api/preview/enable",
+          enable: "/api/preview/enable/",
+          disable: "/api/preview/disable/",
           shareAccess: false,
         },
       },

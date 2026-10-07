@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@sanity/client";
 import { computeMappingKey } from "../../domain/mapping-key";
+import { aiReviewDocumentId, productContentDocumentId } from "../../domain/cms-document-ids";
 import {
   isPackageId,
   isProductId,
@@ -13,7 +14,7 @@ import {
 } from "../../domain/ids";
 import type { MappingIdentity } from "../../domain/data-contracts";
 import type { EnvironmentSource } from "../config/environment";
-import { selectComponentTarget } from "../config/targets";
+import { selectComponentTarget, type LiveTarget } from "../config/targets";
 import { fixtureSnapshot } from "../fixtures/catalog";
 
 const READ_TIMEOUT_MS = 8_000;
@@ -134,7 +135,7 @@ export async function projectPublishedMappings(query: Query, requestedProductIds
   const reviewsByProduct = new Map<string, RecordValue>();
   for (const candidate of reviewRows) {
     const item = record(candidate); const owner = reference(item?.productId);
-    if (!item || !owner || item._id !== `ai_review.${owner}` || reviewsByProduct.has(owner)) return undefined;
+    if (!item || !owner || !/^prd_[a-z0-9_]+$/.test(owner) || item._id !== aiReviewDocumentId(owner) || reviewsByProduct.has(owner)) return undefined;
     reviewsByProduct.set(owner, item);
   }
 
@@ -173,7 +174,7 @@ export async function projectPublishedMappings(query: Query, requestedProductIds
     if (packagePrimaryCount !== (primaryPackageId ? 1 : 0) || repositoryPrimaryCount !== (primaryRepositoryId ? 1 : 0)) return undefined;
 
     const content = contentsByProduct.get(id);
-    if (!content || content._id !== `content.product.${id}.en` || (primaryPackageId === undefined && !nonEmpty(content.noPackageReason))) return undefined;
+    if (!content || content._id !== productContentDocumentId(id) || (primaryPackageId === undefined && !nonEmpty(content.noPackageReason))) return undefined;
     const review = reviewsByProduct.get(id);
     const sdkPackageVersion = packageVersion(review);
     if (sdkPackageVersion === undefined || (sdkPackageVersion !== null && !primaryPackageId)) return undefined;
@@ -212,9 +213,10 @@ function fixtureMappings(): readonly PublishedMetricsMapping[] {
 export async function readPublishedMappings(
   requestedProductIds?: readonly ProductId[],
   source: EnvironmentSource = process.env,
+  explicitTarget?: LiveTarget<"content">,
 ): Promise<PublishedMappingsResult> {
   try {
-    const target = selectComponentTarget("content", source);
+    const target = explicitTarget ?? selectComponentTarget("content", source);
     if (target.mode === "fixture") {
       const mappings = fixtureMappings();
       return { ok: true, value: requestedProductIds ? mappings.filter(({ productId: id }) => requestedProductIds.includes(id)) : mappings };

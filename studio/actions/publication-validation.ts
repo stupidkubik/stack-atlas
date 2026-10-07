@@ -1,5 +1,6 @@
 import { computeMappingKey } from "../../src/domain/mapping-key";
 import { packageId, productId, repositoryId } from "../../src/domain/ids";
+import { aiReviewDocumentId, categoryContentDocumentId, comparisonContentDocumentId, pageDocumentId, productContentDocumentId, siteSettingsDocumentId } from "../../src/domain/cms-document-ids";
 
 type Doc = Record<string, unknown> & { _id: string; _type: string; _rev?: string };
 type Fetcher = <Result = unknown>(query: string, params?: Record<string, unknown>) => Promise<Result>;
@@ -88,7 +89,8 @@ async function validateProduct(doc: Doc, fetch: Fetcher, errors: string[]): Prom
 
 async function validateProductContent(doc: Doc, fetch: Fetcher, errors: string[]): Promise<void> {
   const productId = refId(doc.productId);
-  if (!productId || doc._id !== `content.product.${productId}.en` || doc.locale !== "en") errors.push("Use the stable content ID and the enabled English locale.");
+  const expectedId = productId && exactId(productId, "prd_") ? productContentDocumentId(productId) : undefined;
+  if (!expectedId || doc._id !== expectedId || doc.locale !== "en") errors.push("Use the stable root-path content ID and the enabled English locale.");
   const product = productId ? await fetchDoc(fetch, productId) : undefined;
   if (!product) errors.push("Publish the common product before its English content.");
   if (!text(doc.summary) || doc.summary.length > 500 || !uniqueKeys(doc.useCases) || !uniqueKeys(doc.fitsWhen) || !uniqueKeys(doc.avoidWhen) || !uniqueKeys(doc.limitations) || !portableTextValid(doc.integrationNotes) || !validSourceList(doc.sources) || !validTimestamp(doc.reviewedAt)) errors.push("Product content needs complete editorial sections, sources, and a valid review date.");
@@ -115,7 +117,8 @@ async function validateComparison(doc: Doc, fetch: Fetcher, errors: string[]): P
 
 async function validateComparisonContent(doc: Doc, fetch: Fetcher, errors: string[]): Promise<void> {
   const comparisonId = refId(doc.comparisonId);
-  if (!comparisonId || doc._id !== `content.comparison.${comparisonId}.en` || doc.locale !== "en") errors.push("Use the stable comparison-content ID and English locale.");
+  const expectedId = comparisonId && exactId(comparisonId, "cmp_") ? comparisonContentDocumentId(comparisonId) : undefined;
+  if (!expectedId || doc._id !== expectedId || doc.locale !== "en") errors.push("Use the stable root-path comparison-content ID and English locale.");
   const comparison = comparisonId ? await fetchDoc(fetch, comparisonId) : undefined;
   const productIds = refs(comparison?.productIds);
   if (!comparison || productIds?.length !== 2) errors.push("Publish the comparison identity first.");
@@ -131,7 +134,8 @@ async function validateComparisonContent(doc: Doc, fetch: Fetcher, errors: strin
 
 async function validateLocalizedCategoryContent(doc: Doc, fetch: Fetcher, errors: string[]): Promise<void> {
   const id = refId(doc.categoryId);
-  if (!id || doc._id !== `content.category.${id}.en` || doc.locale !== "en") errors.push("Use the stable category-content ID and English locale.");
+  const expectedId = id && exactId(id, "cat_") ? categoryContentDocumentId(id) : undefined;
+  if (!expectedId || doc._id !== expectedId || doc.locale !== "en") errors.push("Use the stable root-path category-content ID and English locale.");
   if (!id || !await fetchDoc(fetch, id)) errors.push("Publish the category identity before its English content.");
   if (!text(doc.title) || !portableTextValid(doc.intro) || !validSeo(doc.seo)) errors.push("Category content needs a title, introduction, and SEO text.");
 }
@@ -142,7 +146,7 @@ function validSeo(value: unknown): boolean {
 }
 
 async function validatePage(doc: Doc, errors: string[]): Promise<void> {
-  if (!text(doc.pageKey) || !["home", "aiMethodology", "privacy"].includes(doc.pageKey) || doc.locale !== "en" || doc._id !== `page.${doc.pageKey}.en` || !text(doc.title) || !validSeo(doc.seo)) errors.push("Use a stable English page ID, supported page key, title, and SEO fields.");
+  if (!text(doc.pageKey) || !["home", "aiMethodology", "privacy"].includes(doc.pageKey) || doc.locale !== "en" || doc._id !== pageDocumentId(String(doc.pageKey)) || !text(doc.title) || !validSeo(doc.seo)) errors.push("Use a stable root-path English page ID, supported page key, title, and SEO fields.");
   const sections = Array.isArray(doc.sections) ? doc.sections as Record<string, unknown>[] : [];
   if (sections.length < 1 || sections.length > 8 || !uniqueKeys(sections)) errors.push("Pages need one to eight sections with unique stable keys.");
   if (doc.pageKey === "home" && (sections[0]?._type !== "heroSection" || sections.filter((section) => section._type === "heroSection").length !== 1 || sections.some((section) => ["richTextSection", "aiScoreExample"].includes(String(section._type))))) errors.push("Home requires one first-position hero and only approved home sections.");
@@ -151,7 +155,8 @@ async function validatePage(doc: Doc, errors: string[]): Promise<void> {
 
 async function validateAiReview(doc: Doc, fetch: Fetcher, errors: string[]): Promise<string | undefined> {
   const productIdRef = refId(doc.productId);
-  if (!productIdRef || doc._id !== `ai_review.${productIdRef}` || doc.methodologyVersion !== "cms-ai-support-v1" || !validTimestamp(doc.reviewedAt) || !text(doc.reviewerLabel)) errors.push("Use the stable AI-review ID, active methodology, reviewer label, and valid review date.");
+  const expectedId = productIdRef && exactId(productIdRef, "prd_") ? aiReviewDocumentId(productIdRef) : undefined;
+  if (!expectedId || doc._id !== expectedId || doc.methodologyVersion !== "cms-ai-support-v1" || !validTimestamp(doc.reviewedAt) || !text(doc.reviewerLabel)) errors.push("Use the stable root-path AI-review ID, active methodology, reviewer label, and valid review date.");
   const product = productIdRef ? await fetchDoc(fetch, productIdRef) : undefined;
   if (!product) errors.push("Publish the product identity before its AI review.");
   const signals = Array.isArray(doc.signals) ? doc.signals as Record<string, unknown>[] : [];
@@ -207,7 +212,7 @@ export async function validatePublicationDraft(doc: Doc, fetch: Fetcher): Promis
     case "siteSettings": {
       const navigation = Array.isArray(doc.navigation) ? doc.navigation as Record<string, unknown>[] : [];
       const pageIds = refs(doc.footerLinks);
-      if (!text(doc.siteName) || doc.defaultLocale !== "en" || JSON.stringify(doc.activeLocales) !== JSON.stringify(["en"]) || !uniqueKeys(navigation) || !pageIds?.length) errors.push("Site settings require the English locale, unique navigation items, and published footer pages.");
+      if (doc._id !== siteSettingsDocumentId() || !text(doc.siteName) || doc.defaultLocale !== "en" || JSON.stringify(doc.activeLocales) !== JSON.stringify(["en"]) || !uniqueKeys(navigation) || !pageIds?.length) errors.push("Site settings require the stable root-path ID, English locale, unique navigation items, and published footer pages.");
       for (const pageId of pageIds ?? []) if (!await fetchDoc(fetch, pageId)) errors.push("Every footer destination must be a published page.");
       break;
     }

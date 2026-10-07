@@ -16,6 +16,7 @@ import type {
   ProductContentRevision,
 } from "../../domain/catalog";
 import { toPublishedCatalog } from "../../domain/catalog";
+import { aiReviewDocumentId, comparisonContentDocumentId, productContentDocumentId } from "../../domain/cms-document-ids";
 import { createCatalogIdAllowlist } from "../../domain/measurement";
 import { utcDateTime } from "../../domain/utc";
 
@@ -96,7 +97,7 @@ const products: Product[] = [
 ];
 
 const publicContent = (id: ReturnType<typeof productId>, name: string): ProductContentRevision => ({
-  documentId: `content.product.${id}.en`,
+  documentId: productContentDocumentId(id),
   productId: id,
   locale: "en",
   state: "published",
@@ -131,7 +132,7 @@ function signal(
 }
 
 export const completeAiReviewFixture: AiReviewProjection = {
-  id: "ai_review.prd_sanity",
+  id: aiReviewDocumentId(sanityId),
   productId: sanityId,
   mappingKey: "fixture:@fixture/sanity-sdk",
   methodologyVersion: "fixture-methodology-v0",
@@ -142,7 +143,7 @@ export const completeAiReviewFixture: AiReviewProjection = {
 };
 
 export const incompleteAiReviewFixture: AiReviewProjection = {
-  id: "ai_review.prd_contentful",
+  id: aiReviewDocumentId(contentfulId),
   productId: contentfulId,
   mappingKey: "fixture:@fixture/contentful-sdk",
   methodologyVersion: "fixture-methodology-v0",
@@ -164,7 +165,7 @@ export const fixtureSnapshot: CatalogSnapshot = {
       noPackageReason: "Synthetic fixture: no SDK mapping is provided.",
     },
     {
-      documentId: "drafts.content.product.prd_synthetic_draft_marker.en",
+      documentId: `drafts.${productContentDocumentId(draftMarkerId)}`,
       productId: draftMarkerId,
       locale: "en",
       state: "draft",
@@ -196,7 +197,7 @@ export const fixtureSnapshot: CatalogSnapshot = {
   ],
   comparisonContent: [
     {
-      documentId: "content.comparison.cmp_sanity_contentful_fixture.en",
+      documentId: comparisonContentDocumentId("cmp_sanity_contentful_fixture"),
       comparisonId: comparisonId("cmp_sanity_contentful_fixture"),
       locale: "en",
       state: "published",

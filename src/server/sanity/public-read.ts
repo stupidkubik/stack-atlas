@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@sanity/client";
 import { unstable_cache } from "next/cache";
 import { categoryId, comparisonId, packageId, pairKey, productId, repositoryId, type ProductId } from "../../domain/ids";
+import { aiReviewDocumentId, categoryContentDocumentId, comparisonContentDocumentId, pageDocumentId, productContentDocumentId, siteSettingsDocumentId } from "../../domain/cms-document-ids";
 import { toPublishedCatalog, type AiReviewProjection, type AiSignal, type CatalogSnapshot, type PublishedCatalog } from "../../domain/catalog";
 import type { UtcDateTime } from "../../domain/utc";
 import { selectComponentTarget } from "../config/targets";
@@ -335,32 +336,37 @@ function projectAiReview(input: RecordValue): AiReviewProjection | undefined {
   const product = ref(input.productId);
   const signalsInput = list(input.signals);
   const signalKeys = ["types", "llmsTxt", "mcp"] as const;
-  if (!product || input._id !== `ai_review.${product}` || !text(input.mappingKey) || !text(input.methodologyVersion) || !text(input.reviewerLabel) || !validDate(input.reviewedAt) || !signalsInput || signalsInput.length !== 3) return undefined;
+  if (!product || !/^prd_[a-z0-9_]+$/.test(product) || input._id !== aiReviewDocumentId(product) || !text(input.mappingKey) || !text(input.methodologyVersion) || !text(input.reviewerLabel) || !validDate(input.reviewedAt) || !signalsInput || signalsInput.length !== 3) return undefined;
   const signals = signalsInput.map((signalInput, index): AiSignal | undefined => {
     const signal = record(signalInput); const key = signal?.key; const evidenceInputs = list(signal?.evidence);
     if (!signal || key !== signalKeys[index] || !["present", "absent", "unknown", "error", "not_applicable"].includes(String(signal.state)) || !text(signal.scope) || !(signal.checkedAt === null || validDate(signal.checkedAt)) || !evidenceInputs) return undefined;
     const evidence = evidenceInputs.map((evidenceInput) => {
-      const item = record(evidenceInput); const entryPoints = item?.entryPoints === undefined ? undefined : list(item.entryPoints);
+      const item = record(evidenceInput);
+      const officialSourceUrl = item?.officialSourceUrl === null ? undefined : item?.officialSourceUrl;
+      const packageVersion = item?.packageVersion === null ? undefined : item?.packageVersion;
+      const rawEntryPoints = item?.entryPoints === null ? undefined : item?.entryPoints;
+      const entryPoints = rawEntryPoints === undefined ? undefined : list(rawEntryPoints);
       return item && isHttpUrl(item.sourceUrl) && text(item.finding) && validDate(item.checkedAt) &&
-        (item.officialSourceUrl === undefined || isHttpUrl(item.officialSourceUrl)) &&
-        (item.packageVersion === undefined || text(item.packageVersion)) &&
-        (item.entryPoints === undefined || (entryPoints && entryPoints.every(text)))
+        (officialSourceUrl === undefined || isHttpUrl(officialSourceUrl)) &&
+        (packageVersion === undefined || text(packageVersion)) &&
+        (rawEntryPoints === undefined || (entryPoints && entryPoints.every(text)))
         ? { sourceUrl: item.sourceUrl, finding: item.finding, checkedAt: item.checkedAt as UtcDateTime,
-          ...(item.officialSourceUrl !== undefined ? { officialSourceUrl: item.officialSourceUrl as string } : {}),
-          ...(item.packageVersion !== undefined ? { packageVersion: item.packageVersion as string } : {}),
+          ...(officialSourceUrl !== undefined ? { officialSourceUrl: officialSourceUrl as string } : {}),
+          ...(packageVersion !== undefined ? { packageVersion: packageVersion as string } : {}),
           ...(entryPoints ? { entryPoints: entryPoints as string[] } : {}) }
         : undefined;
     });
     if (evidence.some((item) => !item)) return undefined;
-    if (key === "types" && signal.kind !== undefined && signal.kind !== null && !["bundled", "external", "none"].includes(String(signal.kind))) return undefined;
-    if (key !== "types" && signal.kind !== undefined) return undefined;
+    const kind = signal.kind === null ? undefined : signal.kind;
+    if (key === "types" && kind !== undefined && !["bundled", "external", "none"].includes(String(kind))) return undefined;
+    if (key !== "types" && kind !== undefined) return undefined;
     return {
       key: key as AiSignal["key"],
       state: signal.state as AiSignal["state"],
       scope: signal.scope,
       checkedAt: signal.checkedAt as UtcDateTime | null,
       evidence: evidence as NonNullable<AiSignal["evidence"]>,
-      ...(key === "types" && signal.kind !== undefined ? { kind: signal.kind as AiSignal["kind"] } : {}),
+      ...(key === "types" && kind !== undefined ? { kind: kind as AiSignal["kind"] } : {}),
     };
   });
   if (signals.some((signal) => !signal)) return undefined;
@@ -400,7 +406,8 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
   const categoryById = new Map<string, CmsPublicCategory>();
   for (const input of categoryDocuments) {
     const item = record(input); const id = item?._id; const slug = validSlug(item?.routeSlug); const order = item?.displayOrder;
-    const content = categoryContentDocuments.map(record).find((candidate) => ref(candidate?.categoryId) === id && candidate?.locale === "en");
+    const expectedContentId = typeof id === "string" && /^cat_[a-z0-9_]+$/.test(id) ? categoryContentDocumentId(id) : undefined;
+    const content = categoryContentDocuments.map(record).find((candidate) => ref(candidate?.categoryId) === id && candidate?._id === expectedContentId && candidate?.locale === "en");
     const title = content?.title; const intro = portableText(content?.intro); const seo = validSeo(content?.seo);
     if (typeof id !== "string" || !categoryEntities.has(id) || !slug || !Number.isSafeInteger(order) || typeof order !== "number" || !text(title) || !intro || !seo) continue;
     categoryById.set(id, { id, routeSlug: slug, displayOrder: order, content: { title, intro, seo } });
@@ -413,7 +420,7 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
   const productById = new Map<string, RecordValue>();
   for (const input of productDocuments) { const item = record(input); if (typeof item?._id === "string") productById.set(item._id, item); }
   const contentByProductId = new Map<string, RecordValue>();
-  for (const input of productContentDocuments) { const item = record(input); const id = ref(item?.productId); if (item && id && item.locale === "en" && !contentByProductId.has(id)) contentByProductId.set(id, item); }
+  for (const input of productContentDocuments) { const item = record(input); const id = ref(item?.productId); if (item && id && /^prd_[a-z0-9_]+$/.test(id) && item._id === productContentDocumentId(id) && item.locale === "en" && !contentByProductId.has(id)) contentByProductId.set(id, item); }
 
   const products: CmsPublicProduct[] = [];
   const productIdSet = new Set<string>();
@@ -443,7 +450,8 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
     if (!useCases || !fitsWhen || !avoidWhen || !limitations || !integrationNotes || !contentSources || !seo || !criteria || criteria.some((x) => !x) || criteria.length !== expectedCriteria.length || new Set(criteria.map((x) => x?.key)).size !== criteria.length || expectedCriteria.some((key) => !criteria.some((x) => x?.key === key))) continue;
     const completeCriteria = criteria.filter((criterion): criterion is NonNullable<typeof criterion> => Boolean(criterion));
     const alternativeIds = refs(content.alternativeIds);
-    if (!alternativeIds || (primaryPackageId === undefined && !text(content.noPackageReason)) || (primaryPackageId !== undefined && content.noPackageReason !== undefined && !text(content.noPackageReason))) continue;
+    const noPackageReason = content.noPackageReason === null ? undefined : content.noPackageReason;
+    if (!alternativeIds || (primaryPackageId === undefined && !text(noPackageReason)) || (primaryPackageId !== undefined && noPackageReason !== undefined && !text(noPackageReason))) continue;
     if (contentSources.some((source) => !sourceSet.has(source.key))) continue;
     if (criteria.some((criterion) => criterion!.sourceKeys.some((key) => !sourceSet.has(key)))) continue;
     const domainProduct = {
@@ -454,7 +462,7 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
     const selectedRepositories = repoDocs as RecordValue[];
     products.push({
       product: { ...domainProduct, officialWebsiteUrl: item.officialWebsiteUrl as string, officialDocsUrl: item.officialDocsUrl as string, hostingModels: (list(item.hostingModels) ?? []) as string[], apiStyles: (list(item.apiStyles) ?? []) as string[] },
-      content: { summary: content.summary, useCases, fitsWhen, avoidWhen, limitations, integrationNotes, criteriaBlocks: completeCriteria, sources: contentSources, alternativeIds, reviewedAt: content.reviewedAt, seo, ...(text(content.noPackageReason) ? { noPackageReason: content.noPackageReason } : {}) },
+      content: { summary: content.summary, useCases, fitsWhen, avoidWhen, limitations, integrationNotes, criteriaBlocks: completeCriteria, sources: contentSources, alternativeIds, reviewedAt: content.reviewedAt, seo, ...(text(noPackageReason) ? { noPackageReason } : {}) },
       packages: selectedPackages.map((pkg) => ({ id: pkg._id as string, packageName: pkg.packageName as string, role: pkg.role as string, officialSourceUrl: pkg.officialSourceUrl as string })),
       repositories: selectedRepositories.map((repo) => ({ id: repo._id as string, owner: repo.owner as string, name: repo.name as string, scope: repo.scope as string, role: repo.role as string, officialSourceUrl: repo.officialSourceUrl as string, ...(ref(repo.packageId) ? { packageId: ref(repo.packageId)! } : {}) })),
     });
@@ -471,7 +479,8 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
     let expectedPairKey: string;
     try { expectedPairKey = pairKey([productId(ids[0]), productId(ids[1])]); } catch { continue; }
     if (item.pairKey !== expectedPairKey || !ids.every((product) => productIdSet.has(product)) || ids.some((productIdValue) => !products.find(({ product }) => product.id === productIdValue)?.product.categoryIds.includes(categoryId))) continue;
-    const localized = comparisonContentDocuments.map(record).find((candidate) => ref(candidate?.comparisonId) === id && candidate?.locale === "en");
+    const expectedContentId = /^cmp_[a-z0-9_]+$/.test(id) ? comparisonContentDocumentId(id) : undefined;
+    const localized = comparisonContentDocuments.map(record).find((candidate) => ref(candidate?.comparisonId) === id && candidate?._id === expectedContentId && candidate?.locale === "en");
     if (!localized || !text(localized.title) || localized.title.length > 160 || !validDate(localized.reviewedAt)) continue;
     const taskContext = portableText(localized.taskContext); const verdict = portableText(localized.verdict); const limitations = keyedTexts(localized.limitations); const sourceList = sources(localized.sources); const seo = validSeo(localized.seo);
     const knownSources = new Set(sourceList?.map(({ key }) => key) ?? []);
@@ -503,7 +512,7 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
 
   const pages = (list(raw.pages) ?? []).map(record).flatMap((item) => {
     const pageKey = item?.pageKey; const title = item?.title; const seo = validSeo(item?.seo);
-    if (!item || !["home", "aiMethodology", "privacy"].includes(String(pageKey)) || !text(title) || title.length > 120 || !seo) return [];
+    if (!item || !["home", "aiMethodology", "privacy"].includes(String(pageKey)) || item._id !== pageDocumentId(String(pageKey)) || !text(title) || title.length > 120 || !seo) return [];
     const sections = projectPublicPageSections(item.sections, String(pageKey), productIdSet, new Set(categoryById.keys()), new Set(comparisons.map(({ comparison }) => comparison.id)));
     return sections ? [{ pageKey: pageKey as CmsPublicPage["pageKey"], title, sections, seo }] : [];
   });
@@ -511,11 +520,11 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
   const siteSettingsDoc = record(raw.siteSettings);
   const navItems = list(siteSettingsDoc?.navigation)?.map(record);
   const footerRefs = refs(siteSettingsDoc?.footerLinks);
-  const siteSettings = text(siteSettingsDoc?.siteName) && siteSettingsDoc.defaultLocale === "en" && JSON.stringify(siteSettingsDoc.activeLocales) === JSON.stringify(["en"]) && navItems && navItems.length > 0 && navItems.every((nav) => {
+  const siteSettings = siteSettingsDoc?._id === siteSettingsDocumentId() && text(siteSettingsDoc.siteName) && siteSettingsDoc.defaultLocale === "en" && JSON.stringify(siteSettingsDoc.activeLocales) === JSON.stringify(["en"]) && navItems && navItems.length > 0 && navItems.every((nav) => {
     const type = nav?.targetType;
     return text(nav?.key) && text(nav?.label) && (type === "requestShortlist" || type === "aiMethodology" || (type === "category" && Boolean(ref(nav.categoryId) && categoryById.has(ref(nav.categoryId)!))));
-  }) && footerRefs && footerRefs.every((pageRef) => pages.some((page) => `page.${page.pageKey}.en` === pageRef))
-    ? { siteName: siteSettingsDoc.siteName, navigation: navItems as Record<string, unknown>[], footerPageKeys: footerRefs.map((pageRef) => pageRef.split(".")[1] ?? "") }
+  }) && footerRefs && footerRefs.every((pageRef) => pages.some((page) => pageDocumentId(page.pageKey) === pageRef))
+    ? { siteName: siteSettingsDoc.siteName as string, navigation: navItems as Record<string, unknown>[], footerPageKeys: footerRefs.map((pageRef) => pages.find((page) => pageDocumentId(page.pageKey) === pageRef)?.pageKey ?? "") }
     : undefined;
 
   const publishedPaths = new Set<string>(["/en/", "/en/request-shortlist/", "/en/methodology/ai-readiness/", "/en/privacy/"]);
@@ -555,14 +564,14 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
       ...(product.primaryRepositoryId ? { primaryRepositoryId: repositoryId(product.primaryRepositoryId) } : {}),
       state: "published" as const,
     })),
-    productContent: products.map(({ product, content }) => ({ documentId: `content.product.${product.id}.en`, productId: product.id, locale: "en" as const, state: "published" as const, summary: content.summary, ...(content.noPackageReason ? { noPackageReason: content.noPackageReason } : {}) })),
+    productContent: products.map(({ product, content }) => ({ documentId: productContentDocumentId(product.id), productId: product.id, locale: "en" as const, state: "published" as const, summary: content.summary, ...(content.noPackageReason ? { noPackageReason: content.noPackageReason } : {}) })),
     packages: domainPackages,
     repositories: domainRepositories,
     comparisons: comparisons.map(({ comparison }) => ({
       id: comparisonId(comparison.id), productIds: comparison.productIds,
       pairKey: pairKey(comparison.productIds), categoryId: categoryId(comparison.categoryId), state: "published" as const,
     })),
-    comparisonContent: comparisons.map(({ comparison, content }) => ({ documentId: `content.comparison.${comparison.id}.en`, comparisonId: comparisonId(comparison.id), locale: "en" as const, state: "published" as const, title: content.title })),
+    comparisonContent: comparisons.map(({ comparison, content }) => ({ documentId: comparisonContentDocumentId(comparison.id), comparisonId: comparisonId(comparison.id), locale: "en" as const, state: "published" as const, title: content.title })),
     aiReviews: domainReviews,
   };
   const catalog = toPublishedCatalog(catalogSnapshot);

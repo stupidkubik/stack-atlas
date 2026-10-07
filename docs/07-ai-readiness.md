@@ -30,7 +30,7 @@ MCP подтверждаем ссылкой с официального ресу
 
 ## 3. Данные и состояния
 
-Sanity `aiReview`: `id = ai_review.<productId>`, `productId`, `mappingKey`, `methodologyVersion`, `signals`, `reviewedAt`, `reviewerLabel`, `overrideReason?`, `previousFinding?`. `mappingKey` вычисляет publish action по [06](06-data-pipeline.md) из подтверждённых SDK и source identity; вручную редактор hash не вводит. Каждый signal: `key`, `state`, `kind?` для types, `checkedAt` / `null`, `scope`, `reason?`, `evidence[]`. Evidence: `sourceUrl`, `officialSourceUrl?`, `finding`, `checkedAt`, `packageVersion` / `entryPoints?`; отрицательное finding перечисляет проверенную область. В публичной записи нет email редактора, приватных заметок и секретов.
+Sanity `aiReview`: `id = ai_review_<productId>`, `productId`, `mappingKey`, `methodologyVersion`, `signals`, `reviewedAt`, `reviewerLabel`, `overrideReason?`, `previousFinding?`. `mappingKey` вычисляет publish action по [06](06-data-pipeline.md) из подтверждённых SDK и source identity; вручную редактор hash не вводит. Каждый signal: `key`, `state`, `kind?` для types, `checkedAt` / `null`, `scope`, `reason?`, `evidence[]`. Evidence: `sourceUrl`, `officialSourceUrl?`, `finding`, `checkedAt`, `packageVersion` / `entryPoints?`; отрицательное finding перечисляет проверенную область. В публичной записи нет email редактора, приватных заметок и секретов.
 
 | state | Значение |
 | --- | --- |
