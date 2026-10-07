@@ -252,6 +252,7 @@ export function selectDevelopmentCollectorCliTarget<Component extends Developmen
   const hasCi = source.CI === "true" || source.CI === "1";
   if (
     !hasCi || source.GITHUB_ACTIONS !== "true" || source.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
+    source.GITHUB_REF !== "refs/heads/work/foundation-first-pass" ||
     source.APP_ENV?.trim() !== "development" ||
     source.PKGCOMPASS_UNTRUSTED_PR === "true" || source.VERCEL || source.VERCEL_ENV ||
     source.VERCEL_GIT_PULL_REQUEST_ID

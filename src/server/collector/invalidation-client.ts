@@ -32,13 +32,25 @@ export async function invalidateMetricsProducts(input: MetricsInvalidationInput)
 
   const url = new URL("/api/import-revalidate/", new URL(configuredOrigin));
   if (!origins.includes(url.origin)) throw new Error("metrics_invalidation_target_invalid");
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+    authorization: `Bearer ${target.settings.IMPORT_INVALIDATION_SECRET}`,
+  };
+  const oidcToken = source.VERCEL_OIDC_TOKEN?.trim();
+  const isTrustedDevelopmentPreview = url.protocol === "https:" && !url.port &&
+    url.hostname === "pkg-compass-git-work-foundati-aea6dd-evgeniis-projects-0daccd9a.vercel.app";
+  const isApprovedDispatchRef = source.GITHUB_REF === "refs/heads/work/foundation-first-pass";
+  if (
+    appEnvironment === "development" && isApprovedDispatchRef && oidcToken &&
+    !/[\r\n]/.test(oidcToken) && isTrustedDevelopmentPreview
+  ) {
+    headers["x-vercel-trusted-oidc-idp-token"] = oidcToken;
+  }
+
   const response = await (input.fetcher ?? fetch)(url, {
     method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      authorization: `Bearer ${target.settings.IMPORT_INVALIDATION_SECRET}`,
-    },
+    headers,
     body: JSON.stringify({
       schemaVersion: 1,
       environment: appEnvironment,

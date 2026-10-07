@@ -30,6 +30,7 @@ describe("collector CLI safety boundary", () => {
       CI: "true",
       GITHUB_ACTIONS: "true",
       GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF: "refs/heads/work/foundation-first-pass",
     });
     const targetSource = {
       ...githubRunner,
@@ -45,6 +46,10 @@ describe("collector CLI safety boundary", () => {
     expect(selectDevelopmentCollectorCliTarget("metricsWriter", targetSource)).toMatchObject({ mode: "live", environment: "development" });
     expect(selectDevelopmentCollectorCliTarget("content", targetSource)).toMatchObject({ mode: "live", environment: "development" });
     expect(selectDevelopmentCollectorCliTarget("importInvalidation", targetSource)).toMatchObject({ mode: "live", environment: "development" });
+    expect(() => selectDevelopmentCollectorCliTarget("importInvalidation", {
+      ...targetSource,
+      GITHUB_REF: "refs/pull/42/merge",
+    })).toThrow();
     expect(() => commandEnvironment(args, {
       APP_ENV: "development",
       CI: "true",
