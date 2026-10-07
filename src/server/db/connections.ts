@@ -3,7 +3,7 @@ import "server-only";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Client, Pool } from "pg";
 import { SafeConfigurationError, type EnvironmentSource } from "../config/environment";
-import { selectComponentTarget } from "../config/targets";
+import { selectComponentTarget, type LiveTarget } from "../config/targets";
 
 export interface PooledMetricsReader {
   readonly db: NodePgDatabase;
@@ -62,6 +62,13 @@ export function createDirectMetricsWriterSession(source: EnvironmentSource = pro
   const target = selectComponentTarget("metricsWriter", source);
   if (target.mode === "fixture") unavailable("metricsWriter");
 
+  return createDirectMetricsWriterSessionFromTarget(target);
+}
+
+export function createDirectMetricsWriterSessionFromTarget(
+  target: LiveTarget<"metricsWriter">,
+): DirectDatabaseSession {
+  if (target.mode !== "live" || target.component !== "metricsWriter") unavailable("metricsWriter");
   return createDirectSession(target.settings.DATABASE_IMPORT_URL, "pkgcompass-collector");
 }
 

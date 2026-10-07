@@ -23,7 +23,7 @@ describe("metrics cache invalidation client", () => {
       },
     });
 
-    expect(requestUrl).toBe("http://localhost:3000/api/import-revalidate");
+    expect(requestUrl).toBe("http://localhost:3000/api/import-revalidate/");
     expect(new Headers(request?.headers).get("authorization")).toBe(`Bearer ${source.IMPORT_INVALIDATION_SECRET}`);
     expect(JSON.parse(String(request?.body))).toEqual({
       schemaVersion: 1,

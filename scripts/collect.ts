@@ -4,8 +4,8 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AppEnvironment, EnvironmentSource, LiveEnvironment } from "../src/server/config/environment";
 import { SafeConfigurationError } from "../src/server/config/environment";
-import { selectComponentTarget } from "../src/server/config/targets";
-import { createDirectMetricsWriterSession } from "../src/server/db/connections";
+import { selectComponentTarget, selectDevelopmentCollectorCliTarget, type LiveTarget } from "../src/server/config/targets";
+import { createDirectMetricsWriterSessionFromTarget } from "../src/server/db/connections";
 import { replaceMetricsForProduct } from "../src/server/db/metrics-repository";
 import { releaseCollectorLock, tryAcquireCollectorLock } from "../src/server/db/collector-lock";
 import type { MappingIdentity } from "../src/domain/data-contracts";
@@ -68,6 +68,23 @@ export function parseCollectCliArgs(argv: readonly string[]): CollectCliArgs {
   return { environment, mode, allowProduction, ...(reportPath ? { reportPath } : {}) };
 }
 
+function isWithinDirectory(root: string, destination: string): boolean {
+  const relativePath = relative(resolve(root), resolve(destination));
+  return relativePath !== "" && relativePath !== ".." &&
+    !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath);
+}
+
+export function isAllowedCollectReportPath(
+  path: string,
+  options: { readonly runnerTemp?: string; readonly cwd?: string } = {},
+): boolean {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const destination = resolve(cwd, path);
+  const roots = [resolve(cwd, "artifacts/runs")];
+  if (options.runnerTemp && isAbsolute(options.runnerTemp)) roots.push(resolve(options.runnerTemp));
+  return roots.some((root) => isWithinDirectory(root, destination));
+}
+
 function loadLocalEnvironment(): void {
   try {
     const require = createRequire(import.meta.url);
@@ -78,7 +95,7 @@ function loadLocalEnvironment(): void {
   }
 }
 
-function commandEnvironment(args: CollectCliArgs, source: EnvironmentSource): EnvironmentSource {
+export function commandEnvironment(args: CollectCliArgs, source: EnvironmentSource): EnvironmentSource {
   if (source.APP_ENV?.trim() && source.APP_ENV.trim() !== args.environment) throw new SafeCollectorCliError("collect_environment_mismatch");
   if (
     source.GITHUB_EVENT_NAME === "pull_request" || source.PKGCOMPASS_UNTRUSTED_PR === "true" ||
@@ -89,7 +106,45 @@ function commandEnvironment(args: CollectCliArgs, source: EnvironmentSource): En
     (source.VERCEL_ENV === "development" && args.environment !== "development") ||
     (source.VERCEL_ENV === "preview" && (args.environment !== "development" || source.PKGCOMPASS_TRUSTED_PREVIEW !== "true"))
   ) throw new SafeCollectorCliError("collect_environment_mismatch");
+
+  const hasCi = source.CI === "true" || source.CI === "1";
+  const githubActions = source.GITHUB_ACTIONS === "true";
+  if (hasCi || githubActions) {
+    const trustedDispatch = hasCi && githubActions && source.GITHUB_EVENT_NAME === "workflow_dispatch";
+    if (!trustedDispatch) throw new SafeCollectorCliError("collect_untrusted_context");
+    if (args.environment === "production") throw new SafeCollectorCliError("collect_production_workflow_unavailable");
+
+    // Live target construction uses the separately guarded collector-only selector;
+    // the app-wide resolver continues to treat this Actions context as fixture.
+    return { ...source, APP_ENV: args.environment };
+  }
+
   return { ...source, APP_ENV: args.environment };
+}
+
+function isTrustedGitHubDispatch(source: EnvironmentSource): boolean {
+  return (source.CI === "true" || source.CI === "1") &&
+    source.GITHUB_ACTIONS === "true" && source.GITHUB_EVENT_NAME === "workflow_dispatch";
+}
+
+interface CollectorLiveTargets {
+  readonly metricsWriter: LiveTarget<"metricsWriter">;
+  readonly content: LiveTarget<"content">;
+  readonly importInvalidation?: LiveTarget<"importInvalidation">;
+}
+
+function selectCollectorTarget<Component extends "content" | "metricsWriter" | "importInvalidation">(
+  component: Component,
+  source: EnvironmentSource,
+  trustedDispatch: boolean,
+): LiveTarget<Component> {
+  const target = trustedDispatch
+    ? selectDevelopmentCollectorCliTarget(component, source)
+    : selectComponentTarget(component, source);
+  if (target.mode !== "live" || target.environment !== source.APP_ENV) {
+    throw new SafeCollectorCliError("collect_live_target_unavailable");
+  }
+  return target;
 }
 
 function fixtureMappings(): readonly MappingIdentity[] {
@@ -141,12 +196,12 @@ function fixtureDependencies(now: Date): MetricsCollectorDependencies {
   };
 }
 
-async function liveDependencies(source: EnvironmentSource): Promise<{
+async function liveDependencies(source: EnvironmentSource, targets: CollectorLiveTargets): Promise<{
   readonly dependencies: MetricsCollectorDependencies;
   readonly close: () => Promise<void>;
 }> {
   const { readPublishedMappings } = await import("../src/server/sanity/published-mapping");
-  const session = createDirectMetricsWriterSession(source);
+  const session = createDirectMetricsWriterSessionFromTarget(targets.metricsWriter);
   try {
     await session.connect();
   } catch {
@@ -157,7 +212,7 @@ async function liveDependencies(source: EnvironmentSource): Promise<{
   const environment = source.APP_ENV as LiveEnvironment;
   const dependencies: MetricsCollectorDependencies = {
     readPublishedMappings: async (ids) => {
-      const result = await readPublishedMappings(ids, source);
+      const result = await readPublishedMappings(ids, source, targets.content);
       if (!result.ok) throw new SafeCollectorCliError(result.code === "invalid_response" ? "collect_mapping_invalid" : "collect_cms_unavailable");
       return result.value.map(({ productId: id, primaryPackage, primaryRepository }) => ({
         productId: productId(id),
@@ -166,25 +221,34 @@ async function liveDependencies(source: EnvironmentSource): Promise<{
       }));
     },
     collectNpm: (mapping, now) => collectNpmDownloads({ mapping, now }),
-    collectGitHub: async (mapping, now) => collectGitHubMetrics({ mapping, now, token: source.GITHUB_API_TOKEN }),
+    collectGitHub: async (mapping, now) => collectGitHubMetrics({
+      mapping,
+      now,
+      token: source.GITHUB_API_TOKEN?.trim() || undefined,
+    }),
     acquireLock: () => tryAcquireCollectorLock(session.client, environment),
     releaseLock: () => releaseCollectorLock(session.client, environment),
     writeProduct: async (id, observations, runId, now) => {
       const result = await replaceMetricsForProduct({ db: session.db, now, runId }, id, observations);
       return result.written;
     },
-    invalidate: (env, ids) => invalidateMetricsProducts({ environment: env as LiveEnvironment, productIds: ids, source }),
+    invalidate: (env, ids) => {
+      if (!targets.importInvalidation) throw new SafeCollectorCliError("collect_invalidation_target_unavailable");
+      return invalidateMetricsProducts({
+        environment: env as LiveEnvironment,
+        productIds: ids,
+        source,
+        target: targets.importInvalidation,
+      });
+    },
   };
   return { dependencies, close: () => session.close() };
 }
 
 async function writeReport(path: string, report: unknown): Promise<void> {
   const runnerTemp = process.env.RUNNER_TEMP;
-  if (!runnerTemp || !isAbsolute(runnerTemp)) throw new SafeCollectorCliError("collect_report_path_invalid");
-  const root = resolve(runnerTemp);
   const destination = resolve(path);
-  const relativePath = relative(root, destination);
-  if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === ".." || isAbsolute(relativePath)) {
+  if (!isAllowedCollectReportPath(path, { runnerTemp })) {
     throw new SafeCollectorCliError("collect_report_path_invalid");
   }
   await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
@@ -197,16 +261,23 @@ export async function runCollectCli(argv = process.argv.slice(2), source: Enviro
   if (!sourceWasInjected) loadLocalEnvironment();
   const commandSource = sourceWasInjected ? { ...process.env, ...source } : process.env;
   const environmentSource = commandEnvironment(args, commandSource);
+  let collectorTargets: CollectorLiveTargets | undefined;
   if (args.environment !== "fixture") {
-    selectComponentTarget("metricsWriter", environmentSource);
-    selectComponentTarget("content", environmentSource);
+    const trustedDispatch = isTrustedGitHubDispatch(environmentSource);
+    collectorTargets = {
+      metricsWriter: selectCollectorTarget("metricsWriter", environmentSource, trustedDispatch),
+      content: selectCollectorTarget("content", environmentSource, trustedDispatch),
+      ...(args.mode === "apply" ? {
+        importInvalidation: selectCollectorTarget("importInvalidation", environmentSource, trustedDispatch),
+      } : {}),
+    };
   }
 
   let close: (() => Promise<void>) | undefined;
   try {
     const dependencies = args.environment === "fixture"
       ? fixtureDependencies(new Date())
-      : await liveDependencies(environmentSource);
+      : await liveDependencies(environmentSource, collectorTargets!);
     if ("close" in dependencies) {
       close = dependencies.close;
     }

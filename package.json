@@ -22,6 +22,7 @@
     "dev:check:neon": "node scripts/dev/inventory-neon-roles.mjs",
     "dev:check:brevo": "node scripts/dev/brevo-smoke.mjs",
     "dev:check:brevo-contact": "node scripts/dev/brevo-contact-smoke.mjs",
+    "collect": "node --conditions=react-server --import=tsx scripts/collect.ts",
     "test:e2e": "playwright test",
     "studio": "sanity dev",
     "studio:build": "sanity build"
@@ -55,6 +56,7 @@
     "sanity": "6.17.0",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
+    "tsx": "4.23.15",
     "typescript-eslint": "8.71.0",
     "vite": "8.3.2",
     "vitest": "5.0.3"

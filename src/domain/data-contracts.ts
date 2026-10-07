@@ -122,6 +122,7 @@ export function parseMetricObservation(input: unknown, now = new Date()): Metric
     !(row.value === null || (typeof row.value === "number" && Number.isSafeInteger(row.value) && row.value >= 0) ||
       (metric === "license" && typeof row.value === "string" && row.value.length <= 128)) ||
     !(row.observedAt === null || validInstant(row.observedAt, now)) ||
+    (row.status !== "ok" && (row.value !== null || row.observedAt !== null)) ||
     !(row.periodStart === null || validDay(row.periodStart)) ||
     !(row.periodEnd === null || validDay(row.periodEnd))
   ) return undefined;

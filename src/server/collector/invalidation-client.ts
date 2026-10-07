@@ -3,12 +3,13 @@ import "server-only";
 import { isProductId, type ProductId } from "../../domain/ids";
 import type { AppEnvironment, EnvironmentSource, LiveEnvironment } from "../config/environment";
 import { trustedOrigins } from "../config/origins";
-import { selectComponentTarget } from "../config/targets";
+import { selectComponentTarget, type LiveTarget } from "../config/targets";
 
 export interface MetricsInvalidationInput {
   readonly environment: LiveEnvironment;
   readonly productIds: readonly ProductId[];
   readonly source?: EnvironmentSource;
+  readonly target?: LiveTarget<"importInvalidation">;
   readonly fetcher?: typeof fetch;
 }
 
@@ -23,13 +24,13 @@ export async function invalidateMetricsProducts(input: MetricsInvalidationInput)
   const source = input.source ?? process.env;
   const appEnvironment: AppEnvironment = input.environment;
   if (source.APP_ENV && source.APP_ENV.trim() !== appEnvironment) throw new Error("metrics_invalidation_target_invalid");
-  const target = selectComponentTarget("importInvalidation", source.APP_ENV ? source : { ...source, APP_ENV: appEnvironment });
+  const target = input.target ?? selectComponentTarget("importInvalidation", source.APP_ENV ? source : { ...source, APP_ENV: appEnvironment });
   if (target.mode !== "live" || target.environment !== appEnvironment) throw new Error("metrics_invalidation_target_invalid");
   const origins = trustedOrigins(appEnvironment, source);
   const configuredOrigin = source.SITE_URL?.trim();
   if (!configuredOrigin) throw new Error("metrics_invalidation_target_invalid");
 
-  const url = new URL("/api/import-revalidate", new URL(configuredOrigin));
+  const url = new URL("/api/import-revalidate/", new URL(configuredOrigin));
   if (!origins.includes(url.origin)) throw new Error("metrics_invalidation_target_invalid");
   const response = await (input.fetcher ?? fetch)(url, {
     method: "POST",

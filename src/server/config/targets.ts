@@ -237,3 +237,28 @@ export function selectComponentTarget<Component extends ConfigComponent>(
 ): ComponentTarget<Component> {
   return buildTarget(component, resolveAppEnvironment(source), source);
 }
+
+type DevelopmentCollectorComponent = "content" | "metricsWriter" | "importInvalidation";
+
+/**
+ * Explicit target selection for the development collector CLI only.
+ * The app-wide environment resolver remains fixture-only in CI; this narrow path
+ * requires the actual GitHub Actions workflow_dispatch context and never supports production.
+ */
+export function selectDevelopmentCollectorCliTarget<Component extends DevelopmentCollectorComponent>(
+  component: Component,
+  source: EnvironmentSource,
+): LiveTarget<Component> {
+  const hasCi = source.CI === "true" || source.CI === "1";
+  if (
+    !hasCi || source.GITHUB_ACTIONS !== "true" || source.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
+    source.APP_ENV?.trim() !== "development" ||
+    source.PKGCOMPASS_UNTRUSTED_PR === "true" || source.VERCEL || source.VERCEL_ENV ||
+    source.VERCEL_GIT_PULL_REQUEST_ID
+  ) throw new SafeConfigurationError({ code: "environment_mismatch", setting: "APP_ENV" });
+  const target = buildTarget(component, "development", source);
+  if (target.mode !== "live" || target.environment !== "development") {
+    throw new SafeConfigurationError({ code: "environment_mismatch", setting: "APP_ENV" });
+  }
+  return target;
+}

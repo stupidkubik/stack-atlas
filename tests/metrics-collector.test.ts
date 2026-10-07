@@ -68,6 +68,7 @@ describe("metrics collector orchestration", () => {
         acquireLock: async () => false,
         releaseLock: async () => { releaseCalls += 1; },
         writeProduct: async () => { writeCalls += 1; return 1; },
+        invalidate: async () => {},
       },
     });
 
@@ -97,10 +98,31 @@ describe("metrics collector orchestration", () => {
         acquireLock: async () => true,
         releaseLock: async () => {},
         writeProduct: async () => { writeCalls += 1; return 1; },
+        invalidate: async () => {},
       },
     });
 
     expect(report.products).toMatchObject([{ status: "skipped", reason: "mapping_changed", written: 0 }]);
+    expect(writeCalls).toBe(0);
+  });
+
+  it("fails closed before reads when apply mode has no cache invalidation dependency", async () => {
+    let mappingReads = 0;
+    let writeCalls = 0;
+    const report = await runMetricsCollector({
+      environment: "development",
+      mode: "apply",
+      dependencies: {
+        now: () => now,
+        readPublishedMappings: async () => { mappingReads += 1; return [mapping]; },
+        acquireLock: async () => true,
+        releaseLock: async () => {},
+        writeProduct: async () => { writeCalls += 1; return 1; },
+      },
+    });
+
+    expect(report).toMatchObject({ status: "failed", exitCode: 1, products: [] });
+    expect(mappingReads).toBe(0);
     expect(writeCalls).toBe(0);
   });
 

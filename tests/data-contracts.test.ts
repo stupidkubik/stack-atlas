@@ -72,5 +72,10 @@ describe("metric observation contracts", () => {
       ...base,
       dailySeries: [{ day: "2026-09-05", downloads: 0 }, { day: "2026-09-05", downloads: 1 }],
     }, now)).toBeUndefined();
+    expect(parseMetricObservation({
+      ...base,
+      status: "error",
+      reason: "source_timeout",
+    }, now)).toBeUndefined();
   });
 });

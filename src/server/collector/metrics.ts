@@ -89,7 +89,7 @@ export async function runMetricsCollector(input: {
 
   try {
     if (input.mode === "apply") {
-      if (!dependencies.acquireLock || !dependencies.releaseLock || !dependencies.writeProduct) {
+      if (!dependencies.acquireLock || !dependencies.releaseLock || !dependencies.writeProduct || !dependencies.invalidate) {
         throw new Error("collector_write_dependencies_missing");
       }
       locked = await dependencies.acquireLock();
@@ -187,9 +187,9 @@ export async function runMetricsCollector(input: {
       if (errors) status = "partial";
     }
 
-    if (input.mode === "apply" && changedProductIds.length && dependencies.invalidate) {
+    if (input.mode === "apply" && changedProductIds.length) {
       try {
-        await dependencies.invalidate(input.environment, changedProductIds);
+        await dependencies.invalidate!(input.environment, changedProductIds);
         cacheInvalidation = "succeeded";
       } catch {
         cacheInvalidation = "failed";
