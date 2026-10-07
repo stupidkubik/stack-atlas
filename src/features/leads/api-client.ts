@@ -13,7 +13,7 @@ export interface LeadFormPayload {
 /** Sends the transient form values directly to the same-origin server endpoint. */
 export async function submitLeadForm(payload: LeadFormPayload): Promise<LeadSubmissionOutcome> {
   try {
-    const response = await fetch("/api/leads", {
+    const response = await fetch("/api/leads/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

@@ -5,7 +5,7 @@ import {
   type CatalogIdAllowlist,
   type EventRouteType,
 } from "../../domain/measurement";
-import { eventId, type ConversionId, type EventId } from "../../domain/ids";
+import { comparisonId as toComparisonId, eventId, isComparisonId, type ConversionId, type EventId } from "../../domain/ids";
 import type { LeadScenario } from "../../domain/leads";
 import { utcDateTime } from "../../domain/utc";
 
@@ -74,6 +74,14 @@ export function makePageViewed(
   environment: "development" | "production",
 ): AnalyticsEvent | undefined {
   return createAnalyticsEvent({ name: "page_viewed", routeType }, environment);
+}
+
+export function makeComparisonViewed(
+  id: string,
+  environment: "development" | "production",
+): AnalyticsEvent | undefined {
+  if (!isComparisonId(id)) return undefined;
+  return createAnalyticsEvent({ name: "comparison_viewed", routeType: "comparison", comparisonId: toComparisonId(id) }, environment);
 }
 
 export function makeLeadFormViewed(

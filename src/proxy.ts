@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAppEnvironment } from "./server/config/environment";
-import { trustedOrigins } from "./server/config/origins";
+import { catalogPreflightOrigin, trustedOrigins } from "./server/config/origins";
 
 function unavailable(): Response {
   return new Response("<!doctype html><html lang=\"en\"><head><title>Content temporarily unavailable | PkgCompass</title><meta name=\"robots\" content=\"noindex\"></head><body><main><h1>Content temporarily unavailable</h1><p>Please try again later.</p></main></body></html>", {
@@ -13,8 +13,10 @@ function unavailable(): Response {
 export async function proxy(request: NextRequest): Promise<Response> {
   try {
     const environment = resolveAppEnvironment();
-    const origin = request.nextUrl.origin;
-    if (!trustedOrigins(environment).includes(origin)) return unavailable();
+    // NextURL normalizes loopback IPs to localhost. Match Host against owner
+    // configuration, then fetch only that configured origin.
+    const origin = catalogPreflightOrigin(trustedOrigins(environment), request.headers.get("host"));
+    if (!origin) return unavailable();
     if (environment === "fixture") return NextResponse.next();
     const statusUrl = new URL("/api/catalog-status/", origin);
     const response = await fetch(statusUrl, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(12_000) });

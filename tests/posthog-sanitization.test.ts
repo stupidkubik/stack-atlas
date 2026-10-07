@@ -1,11 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { setConsentState } from "../src/features/measurement/consent-store";
-import { sanitizeBeforeSend } from "../src/features/measurement/posthog-client";
+import { initializeMeasurement, sanitizeBeforeSend } from "../src/features/measurement/posthog-client";
+import type { PublicRuntimeConfig } from "../src/server/config/public";
+
+const testConfig: PublicRuntimeConfig = {
+  environment: "development",
+  measurement: {
+    enabled: true,
+    key: "synthetic-posthog-project-key",
+    host: "https://eu.i.posthog.com",
+  },
+};
 
 const pageView = {
   uuid: "1",
   event: "page_viewed",
   properties: {
+    token: "synthetic-posthog-project-key",
     eventSchemaVersion: 1,
     environment: "development",
     routeType: "lead_form",
@@ -22,7 +33,10 @@ const pageView = {
 };
 
 describe("pinned PostHog before_send allowlist", () => {
-  beforeEach(() => setConsentState("granted"));
+  beforeEach(async () => {
+    setConsentState("granted");
+    await initializeMeasurement(testConfig);
+  });
 
   it("retains typed event fields and anonymous ID while stripping URLs and private properties", () => {
     const result = sanitizeBeforeSend(pageView);
@@ -32,6 +46,7 @@ describe("pinned PostHog before_send allowlist", () => {
       environment: "development",
       routeType: "lead_form",
       locale: "en",
+      token: "synthetic-posthog-project-key",
       distinct_id: "anonymous-synthetic-id",
       $insert_id: "78a8d916-f022-4120-a93a-8a97a4672aac",
     });
@@ -44,6 +59,10 @@ describe("pinned PostHog before_send allowlist", () => {
 
   it("drops unknown SDK events and blocks capture immediately after withdrawal", () => {
     expect(sanitizeBeforeSend({ ...pageView, event: "$autocapture" })).toBeNull();
+    expect(sanitizeBeforeSend({
+      ...pageView,
+      properties: { ...pageView.properties, token: "untrusted-token" },
+    })).toBeNull();
     setConsentState("denied");
     expect(sanitizeBeforeSend(pageView)).toBeNull();
   });

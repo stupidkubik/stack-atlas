@@ -2,6 +2,12 @@ import "server-only";
 
 import { SafeConfigurationError, type AppEnvironment, type EnvironmentSource } from "./environment";
 
+/** Select a configured destination; the inbound Host can never create a fetch URL. */
+export function catalogPreflightOrigin(allowed: readonly string[], host: string | null): string | undefined {
+  if (!host) return undefined;
+  return allowed.find((origin) => new URL(origin).host === host);
+}
+
 /** Origins belong to the deployment owner, never request headers or form fields. */
 export function trustedOrigins(environment: AppEnvironment, source: EnvironmentSource = process.env): readonly string[] {
   const result = new Set<string>();

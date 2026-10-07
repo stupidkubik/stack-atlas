@@ -102,4 +102,34 @@ describe("lead submission service", () => {
     expect(results[0]).toEqual(results[1]);
     expect(results[0].status).toBe("accepted");
   });
+
+  it("does not let a late CRM failure downgrade an accepted concurrent retry", async () => {
+    const repository = new MemoryLeadRepository();
+    const lead = submission("00000000-0000-4000-8000-000000000011");
+    let releaseFirst!: (result: Awaited<ReturnType<CrmContacts["upsertRequest"]>>) => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const crm = {
+      upsertRequest: vi.fn<CrmContacts["upsertRequest"]>()
+        .mockImplementationOnce(() => new Promise((resolve) => {
+          releaseFirst = resolve;
+          markFirstStarted();
+        }))
+        .mockResolvedValueOnce({ ok: true, value: { accepted: true } }),
+    } satisfies CrmContacts;
+    const dependencies = { repository, crm, hmacSecret: secret, now: fixedNow };
+
+    const lateRequest = submitLead(lead, ipHmac, dependencies);
+    await firstStarted;
+    const acceptedRequest = await submitLead(lead, ipHmac, dependencies);
+    releaseFirst({ ok: false, code: "crm_unavailable" });
+    const lateFailure = await lateRequest;
+    const retry = await submitLead(lead, ipHmac, dependencies);
+
+    expect(acceptedRequest.status).toBe("accepted");
+    expect(lateFailure).toEqual({ status: "unavailable" });
+    expect(retry).toEqual(acceptedRequest);
+    expect(repository.snapshot()).toEqual({ rows: 1, accepted: 1 });
+    expect(crm.upsertRequest).toHaveBeenCalledTimes(2);
+  });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LEAD_SCENARIOS, type LeadScenario } from "../../domain/leads";
+import { hydrateConsentFromCookie } from "../measurement/consent-store";
 import { trackLeadAccepted, trackLeadFormViewed } from "../measurement/posthog-client";
 import { submitLeadForm } from "./api-client";
 
@@ -23,8 +24,14 @@ export function ShortlistForm({ entryPoint }: { readonly entryPoint: ShortlistEn
   const [permission, setPermission] = useState(false);
   const [state, setState] = useState<FormState>("idle");
   const requestId = useRef<string | null>(null);
+  const formViewTracked = useRef(false);
 
   useEffect(() => {
+    if (formViewTracked.current) return;
+    formViewTracked.current = true;
+    // A persisted grant is hydrated here as well as in ConsentManager so this
+    // form-view event cannot race the consent manager's first passive effect.
+    hydrateConsentFromCookie();
     trackLeadFormViewed(entryPoint);
   }, [entryPoint]);
 
