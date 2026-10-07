@@ -7,7 +7,7 @@
 | FP-01 | [Воспроизводимый каркас приложения](../plans/01-foundation.md) | verified | 20261005T155307Z-FP-01-371d7ac7 | 2026-10-05T15:58:20Z |
 | FP-02 | [Targets, конфигурация и автономные fixtures](../plans/01-foundation.md) | verified | 20261005T175712Z-FP-02-acc2ccc3 | 2026-10-05T18:00:47Z |
 | FP-03 | [Базовые миграции, connections и SQL-права](../plans/01-foundation.md) | review | 20261006T065406Z-FP-03-4c8ce817 | 2026-10-06T21:26:21Z |
-| FP-04 | [Development аккаунты и проверенные live adapters](../plans/01-foundation.md) | blocked | 20261007T120302Z-FP-04-32727494 | 2026-10-07T12:04:47Z |
+| FP-04 | [Development аккаунты и проверенные live adapters](../plans/01-foundation.md) | verified | 20261007T121616Z-FP-04-8da015bf | 2026-10-07T12:23:38Z |
 | FP-05 | [Единый вертикальный прототип и пересчёт](../plans/01-foundation.md) | planned | — | — |
 | CW-01 | [Зафиксировать границы public read и readiness](../plans/02-content-and-public-web.md) | review | 20261006T065345Z-CW-01-f596ec06 | 2026-10-06T06:56:03Z |
 | CW-02 | [Реализовать схемы Studio, проверки публикации и seed input](../plans/02-content-and-public-web.md) | review | 20261006T065627Z-CW-02-96b318d1 | 2026-10-06T21:26:21Z |
