@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   collect-metrics:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/work/foundation-first-pass' && inputs.environment == 'development' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment }}
@@ -49,6 +50,8 @@ jobs:
         run: npm ci
 
       - name: Collect metrics
+        env:
+          VERCEL_OIDC_TOKEN: ${{ secrets.VERCEL_OIDC_TOKEN }}
         run: >-
           npm run collect -- --env "${{ inputs.environment }}" --apply
           --report-path "$RUNNER_TEMP/metrics-report.json"
