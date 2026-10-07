@@ -13,7 +13,7 @@
 | Brevo | Dev requests list в отдельном dev account или изолированном account | Только три атрибута из 09; ни одна campaign/automation не использует этот список |
 | PostHog | Cloud **EU**, отдельный development project | `https://eu.i.posthog.com`; consent-only SDK и только разрешённые события из 10 |
 
-GitHub remote и Vercel project подключены; ежедневный Actions workflow пока отсутствует. Custom domain не требуется: сгенерированный Vercel URL достаточен как origin. Наличие production dataset/branch не подтверждает release readiness; production credentials и release smoke относятся к подготовке выпуска.
+GitHub remote и Vercel project подключены; development-only Actions workflow подготовлен локально, на default branch пока отсутствует. Custom domain не требуется: сгенерированный Vercel URL достаточен как origin. Наличие production dataset/branch не подтверждает release readiness; production credentials и release smoke относятся к подготовке выпуска.
 
 Ниже — owner handoff, а не отчёт о регистрации: никакие аккаунты или ресурсы здесь не создавались и условия сервисов за владельца не принимались.
 
@@ -100,13 +100,30 @@ Generated secrets создавать криптографическим гене
 
 ## Что сейчас реально готово
 
-Development credentials сохранены владельцем в ignored `.env.local`; `.env.example` содержит только шаблон. В проходе 2026-10-05–06 подготовлены воспроизводимые dev CLI: Sanity anonymous published и authenticated preview aggregate reads, authentication четырёх Neon ролей, Brevo list/attributes и отдельный smoke контакта владельца через настоящий CRM adapter. Выполненные проверки и ограничения указаны в текущем run FP-04. Они не подтверждают editing flow, table grants или форму заявки. PostHog EU settings заполнены; SDK/consent и actual event retention ещё не проверены.
+Development credentials сохранены владельцем в ignored `.env.local`; `.env.example` содержит только шаблон. В проходе 2026-10-05–06 подготовлены воспроизводимые dev CLI: Sanity anonymous published и authenticated preview aggregate reads, authentication четырёх Neon ролей, Brevo list/attributes и отдельный smoke контакта владельца через настоящий CRM adapter. Выполненные проверки и ограничения указаны в текущем run FP-04. Эти target probes отдельно не подтверждают editing flow или форму заявки; последующие table grants и runtime результаты перечислены ниже. PostHog EU settings заполнены; настоящий granted transport подтверждён EU HTTP 200. Полная проверка consent lifecycle фиксируется отдельно. Авторизованный retention API 6 октября вернул null для обоих полей: 90-дневное окно не подтверждено.
 
 GitHub remote подключён. Next.js Vercel Preview ветки `work/foundation-first-pass` имеет статус READY. Владелец исправил branch-specific Preview переменные; metadata подтверждает их scope, секретные значения и поведение runtime адаптеров не проверены. Function region сейчас `iad1`; выбор региона нужно согласовать до live data flows.
 
 Bootstrap поддерживает PostgreSQL 16+ ADMIN-only membership создателя роли и ограниченного администратора Neon. Новые SQL-роли создаются без паролей: сначала задать пароль через административное SQL-соединение и сохранить его только в secret store; Reset password в кабинете может не работать до первоначального назначения. Для migration owner временное SET ROLE разрешение снимается после настройки default privileges. Выполнять весь bootstrap в одной транзакции, обычным Run, без Explain и без выделения части DO-блока.
 
-Live selection в `src/server/config/targets.ts` валидирует настройки, включая запрет personal PostHog key в публичной конфигурации; connection factories и migration runner подготовлены. CRM adapter и Sanity read smoke подготовлены; доменные migrations, точные grants и runtime consumers остаются задачами CW/DP/LM. Generated secrets и GitHub dispatch token можно заполнить при появлении их consumers. Vercel Cron автоматически запускается только для Production; Preview dev smoke будущего защищённого handler выполняется вручную. Полный FP-04 остаётся незавершённым до сквозных live smoke и подтверждения retention. Account quotas в этом проходе проверены отдельно через UI; динамический usage не является бессрочной гарантией бесплатности.
+Live selection в `src/server/config/targets.ts` валидирует настройки, включая запрет personal PostHog key в публичной конфигурации; connection factories и migration runner подготовлены. CRM adapter и Sanity read smoke подготовлены; четыре доменные migrations и точные grants применены на dev Neon, повтор миграций и четыре положительных/запрещённых role probes прошли. Runtime consumers и полная приёмка соответствующих CW/DP/LM задач учитываются отдельно. Generated secrets настроены локально; GitHub dispatch token пока не заполнен. Vercel Cron автоматически запускается только для Production; Preview dev smoke будущего защищённого handler выполняется вручную. Полный FP-04 остаётся незавершённым до сквозных live smoke и настройки dispatch credential. Проверяемое удаление analytics старше 90 дней требуется до production по spec 10; наблюдение null не подменяет эту проверку. Account quotas в этом проходе проверены отдельно через UI; динамический usage не является бессрочной гарантией бесплатности.
+
+## Результат прохода 6 октября
+
+На development опубликован точный набор из 28 synthetic документов для пяти CMS и одной пары; повторный publisher не создаёт записей. Локальные authenticated preview, draft isolation и signed webhook проверены. Sanity запрещает anonymous read документов с точкой в `_id`; нормативные localized/page/settings IDs исправлены на root IDs с `_`. Старые 11 dotted canonical документов и 11 drafts сохранены; приложение их не использует, удаление не выполнялось.
+
+Collector реально прочитал npm/GitHub и дважды обновил 20 current metrics в dev Neon; invalidation завершилась успешно. В CLI environment выбирается явно. Пример последовательности (RUN_ID — текущий run из worklog):
+
+```sh
+APP_ENV=development SITE_URL=http://127.0.0.1:3000 npm run dev -- --hostname 127.0.0.1
+APP_ENV=development SITE_URL=http://127.0.0.1:3000 npm run collect -- --env development --dry-run --report-path "artifacts/runs/$RUN_ID/evidence/collector-dry-run.json"
+APP_ENV=development SITE_URL=http://127.0.0.1:3000 npm run collect -- --env development --apply --report-path "artifacts/runs/$RUN_ID/evidence/collector-apply.json"
+APP_ENV=development SITE_URL=http://127.0.0.1:3000 node scripts/dev/measurement-browser-smoke.mjs --env=development --offline-fixture
+```
+
+Последняя команда использует локальный браузер с перехватом всех внешних запросов; её pass подтверждает fixture transport, а не ingestion PostHog. Live Brevo API формы и полный PostHog funnel не запускались после отклонения automatic approval review; для повторного запуска требуется явное разрешение владельца на точные внешние действия. Исторический Brevo adapter upsert/cleanup и частичный PostHog EU HTTP200 не заменяют эти проверки.
+
+`.github/workflows/daily.yml` подготовлен для ручного development dispatch. На default branch он отсутствует, `GITHUB_DISPATCH_TOKEN` не заполнен, поэтому реальный dispatch — `not_run`. Активный Vercel Cron не добавлен; его безопасное предложение сохранено в локальном evidence. Publication остаётся отдельным действием владельца. Подробная матрица и следующий шаг — в [итоге FP-04](../work/journal/2026-10-06-fp04-review.md).
 
 ## Официальные источники по квотам
 
@@ -117,9 +134,9 @@ Read-only проверка авторизованных экранов выпо�
 | Аккаунт / target | Подтверждено через UI | Осталось |
 | --- | --- | --- |
 | Sanity `qrv3qhw1` | Growth Trial $0, 30 дней до автоматического Free; development и production public, 2/2 datasets; 1/2 webhooks; 0/10k documents; API 3/250k, CDN 0/1m, bandwidth 632 B/100 GB | Не использовать trial-only permissions/private features как основу Free v1. Residency, preview/publisher/webhook runtime — отдельные проверки |
-| Neon PkgCompass | Free $0/month, Frankfurt `eu-central-1`; development отмечена Schema-only; 2 ветки. На проект: 1 GB, 100 compute hours, 10 branches, autoscale 2 CU | Доменные migrations и реальные object GRANT после DP/LM |
+| Neon PkgCompass | Free $0/month, Frankfurt `eu-central-1`; development отмечена Schema-only; 2 ветки. На проект: 1 GB, 100 compute hours, 10 branches, autoscale 2 CU | Live проход 6 октября подтвердил migrations apply/repeat и четыре SQL role probes; итоговая повторная приёмка фиксируется в FP-04 |
 | Brevo | Free; 300 sends remaining; экраны Campaigns и Automations пустые | Отправки не используются; API smoke и retention проверяются отдельно |
-| PostHog project `295214` | PkgCompass development, EU application; analytics current 0, allowance и billing limit 1M events; discard client IP включён | Окно 90 дней ещё не подтверждено; consent-only SDK и dashboard smoke требуют LM |
+| PostHog project `295214` | PkgCompass development, EU application; allowance и billing limit 1M events; discard client IP включён. 6 октября авторизованный read-only retention API вернул `retention_months: null`, `retained_from: null` | По [контракту API](https://posthog.com/docs/api/events-retention) plan-derived window отсутствует. Это не 90-дневная retention; проверяемый путь удаления остаётся открытым. Consent-only SDK и dashboard smoke фиксируются отдельно |
 | Vercel pkg-compass | Hobby; Next.js Preview READY; production main пока содержит документацию; fast transfer 551.82 kB/100 GB в отображаемом периоде Sep 5–Oct 5 | Runtime Preview, Cron/dispatch требуют handlers/workflow. Регион функции `iad1` пока не изменён |
 | GitHub stupidkubik/stack-atlas | Public; Actions доступен, показывает каталог первоначальной настройки workflows | `daily` отсутствует на default branch; dispatch not_run. Платные runners/features не выбирались; расходов/upgrade не выполняли |
 

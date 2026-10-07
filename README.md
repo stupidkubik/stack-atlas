@@ -1,6 +1,6 @@
 # PkgCompass
 
-Каталог headless CMS для JS/TS-сайтов. Каркас и автономные fixtures проверены; второй проход foundation готовит миграции и development targets. Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md); внешние интеграции и готовность каталога пока не подтверждены.
+Каталог headless CMS для JS/TS-сайтов. Каркас, автономные fixtures и доменные миграции проверены; текущий проход foundation проверяет development adapters. Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md); полная готовность live-путей и каталога пока не подтверждена.
 
 ## Начало работы
 
@@ -40,15 +40,15 @@ npm run build
 npm run start
 ```
 
-Стартовая страница — `/en/`, `/` перенаправляет на неё. Пока это закрытый от индексации предварительный экран; каталог, форма и live CMS не готовы. `npm run dev` запускает Next.js для разработки. Для каркаса `.env` и внешние аккаунты не нужны.
+Стартовая страница — `/en/`, `/` перенаправляет на неё. Локально доступны synthetic каталог, CMS detail/comparison и форма; полная live-приёмка и публичный release ещё не завершены. `npm run dev` запускает Next.js для разработки. Для каркаса `.env` и внешние аккаунты не нужны.
 
-`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-02. Локальный запуск Studio проверен; вход и редактирование контента ещё не проверены.
+`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-02. Локальный запуск и production build Studio проверены; полный browser editing flow ещё не проверен.
 
 `npm run test` проверяет foundation config, synthetic fixtures, safe projections и отказные сценарии adapters. Playwright настроен для будущих E2E; пустой запуск `test:e2e` не считается пройденной проверкой. Для E2E требуется `PKGCOMPASS_RUN_ID` текущего run: traces сохраняются в его `evidence/playwright/`. Отчёты не размещаются в tracked files. `next-env.d.ts` создаётся `next typegen` перед проверкой типов и исключён из Git.
 
 ## Targets и автономный режим
 
-`APP_ENV` выбирает `fixture`, `development` или `production` для всех компонентов. Локальный запуск без выбранной среды и обычный CI используют fixtures. Явный local `development` предназначен для будущего dev smoke; web config допускает `production` только в Vercel production. Trusted preview требует `development`. PR preview по умолчанию использует fixtures; владелец deployment может явно отметить проверенный preview через `PKGCOMPASS_TRUSTED_PREVIEW=true` в настройках Vercel. Этот флаг не берётся из PR payload. Явный untrusted context сохраняет fixture mode. Provisioning относится к FP-04.
+`APP_ENV` выбирает `fixture`, `development` или `production` для всех компонентов. Локальный запуск без выбранной среды и обычный CI используют fixtures. Явный local `development` предназначен для dev smoke; web config допускает `production` только в Vercel production. Trusted preview требует `development`. PR preview по умолчанию использует fixtures; владелец deployment может явно отметить проверенный preview через `PKGCOMPASS_TRUSTED_PREVIEW=true` в настройках Vercel. Этот флаг не берётся из PR payload. Явный untrusted context сохраняет fixture mode. Provisioning относится к FP-04.
 
 Проверка каждого компонента требует только его настройки; ошибка SQL не скрывает редакционный контент. Неверная live-конфигурация возвращает безопасную ошибку, а незавершённый live adapter — `adapter_unavailable`.
 
@@ -60,11 +60,11 @@ npm run start
 | CRM | Fake с счётчиком accepted, без сохранения email | `BREVO_API_KEY`, `BREVO_REQUEST_LIST_ID` |
 | Measurement | Stub с явным event/ID allowlist | `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` (EU) |
 
-Fixtures находятся в `src/server/fixtures/`, порты — в `src/domain/ports.ts`, выбор targets — в `src/server/config/`. Они помечены synthetic и не подтверждают данные поставщиков. Public config возвращает только среду и публичные PostHog key/host; SDK и consent flow пока не подключены. Live targets и их права проверяются отдельно в FP-04.
+Fixtures находятся в `src/server/fixtures/`, порты — в `src/domain/ports.ts`, выбор targets — в `src/server/config/`. Они помечены synthetic и не подтверждают данные поставщиков. Public config возвращает только среду и публичные PostHog key/host. SDK загружается после analytics consent; withdrawal очищает optional storage. Изолированный браузерный smoke проверяет lifecycle без внешней отправки; полная live-приёмка учитывается отдельно.
 
 ## Миграционный baseline
 
-FP-03 предоставляет общий Drizzle runner и четыре отдельные SQL-роли. В `migrations/meta/_journal.json` пока нет доменных миграций: таблицы метрик и заявок появятся в DP/LM. Bootstrap выполняется аккаунтом, которому разрешено создавать роли; пароли задаются отдельно в secret store. После bootstrap `DATABASE_MIGRATION_URL` должен использовать `pkgcompass_migration_owner`, а не административный аккаунт.
+FP-03 предоставляет общий Drizzle runner и четыре отдельные SQL-роли. В `migrations/meta/_journal.json` зарегистрированы четыре доменные миграции: текущие метрики, lead/rate-limit схема и точные grants. Bootstrap выполняется аккаунтом, которому разрешено создавать роли; пароли задаются отдельно в secret store. После bootstrap `DATABASE_MIGRATION_URL` должен использовать `pkgcompass_migration_owner`, а не административный аккаунт.
 
 CLI получает настройки из окружения процесса; `.env.local` автоматически читает Next.js, но не эти Node-скрипты. Перед CLI запустить доверенный способ загрузки нужных переменных из secret store. Не передавать секретные URL в аргументах команд.
 
@@ -77,9 +77,9 @@ npm run db:migrate -- --env fixture --apply
 
 `fixture` принимает только временный локальный PostgreSQL. Для development явно заменить среду на `--env development` и выбрать dev credentials. `--env` и режим обязательны; `APP_ENV`, если задан, должен совпадать. Для production также обязателен `--allow-production`, включая dry-run. Обработка ошибок выводит безопасный код без URL, SQL detail или credential. Известные Neon pooler hosts не подходят для migrations/collector; connection query допускает только проверенные SSL/channel-binding параметры.
 
-Web metrics reader и lead writer используют `pg.Pool`; migrations и collector — отдельный `pg.Client`, сохраняющий session lock. Runner проверяет порядок и hash применённой истории, сериализует apply и не создаёт историю в dry-run. Полные GRANT и запреты доступа к настоящим таблицам заявок проверяются после доменных миграций; текущий проход FP-03 их не закрывает.
+Web metrics reader и lead writer используют `pg.Pool`; migrations и collector — отдельный `pg.Client`, сохраняющий session lock. Runner проверяет порядок и hash применённой истории, сериализует apply и не создаёт историю в dry-run. После доменных миграций проверены положительные и запрещённые SQL-запросы четырёх ролей на свежем локальном PostgreSQL и development Neon; локальные synthetic записи и DDL в role probes откатываются.
 
-TypeScript connection factories в `src/server/db/` используют политику web-конфига. Migration CLI выбирает target отдельно через явный `--env` и CLI guards; будущий collector CLI в DP должен делать так же. Web factory с настройками по умолчанию в обычном CI не включает live-соединение; подставлять выдуманные Vercel/CI flags для обхода этой границы нельзя.
+TypeScript connection factories в `src/server/db/` используют политику web-конфига. Migration CLI выбирает target отдельно через явный `--env` и CLI guards; collector CLI выбирает target отдельно и сохраняет общий CI fixture boundary; узкий opt-in development workflow_dispatch проверяется отдельным selector. Web factory с настройками по умолчанию в обычном CI не включает live-соединение; подставлять выдуманные Vercel/CI flags для обхода этой границы нельзя.
 
 Интеграционная проверка `npm run test:foundation-db:postgres` требует `DATABASE_TEST_URL` для отдельной loopback-базы `pkgcompass_fp03_review`. Она создаёт только синтетические временные объекты; на live targets её запуск запрещён. Обычный `npm test` без этого target явно пропускает SQL integration cases.
 
@@ -89,7 +89,7 @@ TypeScript connection factories в `src/server/db/` используют пол�
 
 [Справочник регистраций и ключей](docs/setup/development-services.md) описывает Sanity development dataset, Neon dev branch, Brevo dev list, PostHog EU project и подготовку GitHub/Vercel. В нём разделены публичные identifiers, provider credentials и самостоятельно генерируемые секреты, указаны места хранения и официальные источники условий сервисов.
 
-Публичные условия и авторизованные account Plan/Usage экраны сверены 5 октября 2026; результаты и ограничения — в [development services](docs/setup/development-services.md#проверенные-параметры-аккаунтов). Development credentials настроены локально. Проверены вход четырёх Neon ролей и read-only Sanity published/preview API; каталог пока пуст. Next.js Preview готов; branch-specific переменные настроены владельцем. Окно PostHog retention 90 дней и сквозные runtime paths ещё не подтверждены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена.
+Публичные условия и авторизованные account Plan/Usage экраны сверены 5 октября 2026; результаты и ограничения — в [development services](docs/setup/development-services.md#проверенные-параметры-аккаунтов). Development credentials настроены локально. Проверены права четырёх Neon ролей; в Sanity development опубликованы 28 собственных synthetic fixtures для пяти CMS. Publisher повторно подтвердил точный owned set без новых записей. Next.js Preview готов; branch-specific переменные настроены владельцем. Окно PostHog retention 90 дней, live API формы/Brevo, полный analytics funnel и dispatch ещё не подтверждены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена.
 
 ### Проверки dev targets
 
@@ -101,11 +101,11 @@ npm run dev:check:neon -- --env development
 npm run dev:check:brevo -- --env development
 ```
 
-Sanity проверяет aggregate counts с published perspective и preview token, без чтения текстов drafts. Это проверка target/API, не publisher/preview UI или mapping 3–5 CMS. Neon выполняет только SELECT identity четырёх ролей; проверка прав будущих таблиц требует migrations/GRANT из DP/LM и второго прохода FP-03. Brevo read-only smoke проверяет dev requests list и три атрибута.
+Sanity проверяет aggregate counts с published perspective и preview token, без чтения текстов drafts. Это проверка target/API, не publisher/preview UI или mapping 3–5 CMS. Эта команда Neon выполняет только SELECT identity четырёх ролей; отдельный `node scripts/dev/check-neon-role-privileges.mjs --env development` проверяет реальные права таблиц rollback-only synthetic probes после migrations/GRANT. Brevo read-only smoke проверяет dev requests list и три атрибута.
 
 `npm run dev:check:brevo-contact -- --env development` — отдельная **write**-проверка только с выделенным alias владельца из локальной `FP04_TEST_EMAIL`, который не используется в production. Если контакт уже существует, проверка отказывается его менять. Созданный проверкой контакт проверяется через настоящий adapter upsert/repeat и удаляется с подтверждением очистки. Emails/campaigns не отправляются. Alias не добавлять в tracked файлы, command line, fixture, журнал или reports; после smoke убрать его из локального файла, когда он больше не нужен.
 
-CRM entry point `createCrmContacts` в `src/server/crm/` выбирает fake или Brevo по server config. Общий foundation selector пока сохраняет unavailable для незавершённых runtime компонентов; подключение API формы относится к LM. Полный FP-04 DoD требует live publisher/preview/collector/CRM/consent-analytics paths, доменных grants и dispatch consumers; успешный provisioning smoke их не заменяет.
+CRM entry point `createCrmContacts` в `src/server/crm/` выбирает fake или Brevo по server config; форма использует `/api/leads/`. Publisher/preview/webhook и collector проверены на dev targets. Live API формы с Brevo и полный PostHog funnel ещё требуют разрешённых внешних smoke; workflow dispatch требует публикации подготовленного workflow и credential. Итог и точные ограничения — в [отчёте FP-04](docs/work/journal/2026-10-06-fp04-review.md).
 
 ## Документы и результаты
 
