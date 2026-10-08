@@ -328,7 +328,20 @@ function fixtureModel(): CmsPublicReadModel {
       packages: packages.map((item) => ({ id: item.id, packageName: item.packageName, role: item.role, officialSourceUrl: item.officialSourceUrl })),
       repositories: repositories.map((item) => ({ id: item.id, owner: item.owner, name: item.name, scope: item.scope, role: item.role, officialSourceUrl: item.officialSourceUrl, ...(item.packageId ? { packageId: item.packageId } : {}) })),
     })),
-    categories: [], comparisons: [], pages: [], redirects: [],
+    categories: [],
+    comparisons: fixturePublishedCatalog.comparisons.map(({ comparison, content }) => ({
+      comparison: {
+        id: comparison.id, productIds: comparison.productIds, pairKey: comparison.pairKey,
+        categoryId: comparison.categoryId, displayOrder: comparison.productIds,
+      },
+      content: {
+        title: content.title, taskContext: [], criteria: [], choiceGuidance: [],
+        limitations: [], verdict: [], sources: [], reviewedAt: "2026-01-01T00:00:00Z",
+        seo: { title: content.title, description: "Synthetic comparison for offline integration checks." },
+        indexingRequested: false,
+      },
+    })),
+    pages: [], redirects: [],
   };
 }
 
