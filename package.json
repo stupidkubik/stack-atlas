@@ -26,6 +26,7 @@
     "cache:refresh": "node --conditions=react-server --import=tsx scripts/cache-refresh.ts",
     "collect": "node --conditions=react-server --import=tsx scripts/collect.ts",
     "test:e2e": "playwright test",
+    "test:e2e:fixture": "playwright test --config=playwright.fixture.config.ts",
     "studio": "sanity dev",
     "studio:build": "sanity build"
   },
