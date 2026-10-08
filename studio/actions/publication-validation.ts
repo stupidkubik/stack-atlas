@@ -1,3 +1,5 @@
+import { readAiSdkVersion } from "../../src/domain/ai-review-version";
+import { parsePublishedAiReview } from "../../src/domain/ai-readiness";
 import { computeMappingKey } from "../../src/domain/mapping-key";
 import { packageId, productId, repositoryId } from "../../src/domain/ids";
 import { aiReviewDocumentId, categoryContentDocumentId, comparisonContentDocumentId, pageDocumentId, productContentDocumentId, siteSettingsDocumentId } from "../../src/domain/cms-document-ids";
@@ -165,8 +167,15 @@ async function validateAiReview(doc: Doc, fetch: Fetcher, errors: string[]): Pro
   if (signals.some((signal) => !["present", "absent", "unknown", "error", "not_applicable"].includes(String(signal.state)) || !text(signal.scope) || (["present", "absent"].includes(String(signal.state)) && !validTimestamp(signal.checkedAt)) || (["unknown", "error", "not_applicable"].includes(String(signal.state)) && !text(signal.reason)) || (["present", "absent"].includes(String(signal.state)) && (!Array.isArray(signal.evidence) || signal.evidence.length === 0)))) errors.push("Complete every AI-review signal with a state, scope, and supporting evidence or reason.");
   const packageIdRef = refId(product?.primaryPackageId); const repositoryIdRef = refId(product?.primaryRepositoryId);
   const pkg = packageIdRef ? await fetchDoc(fetch, packageIdRef) : undefined; const repo = repositoryIdRef ? await fetchDoc(fetch, repositoryIdRef) : undefined;
-  const typesEvidence = Array.isArray(signals[0]?.evidence) ? signals[0].evidence as Record<string, unknown>[] : [];
-  const sdkPackageVersion = text(typesEvidence[0]?.packageVersion) ? typesEvidence[0].packageVersion as string : null;
+  const sdkPackageVersion = readAiSdkVersion(doc);
+  if (sdkPackageVersion === undefined) {
+    errors.push("Types evidence must declare one consistent SDK version.");
+    return undefined;
+  }
+  if (signals.some((signal) => signal.key !== "types" && signal.state === "present" &&
+    !(Array.isArray(signal.evidence) && signal.evidence.some((item) => validUrl((item as Record<string, unknown>)?.officialSourceUrl))))) {
+    errors.push("Present llms.txt and MCP findings require an official CMS source; community evidence does not earn official credit.");
+  }
   try {
     const calculated = await computeMappingKey({
       productId: productId(productIdRef ?? "prd_invalid"),
@@ -174,6 +183,9 @@ async function validateAiReview(doc: Doc, fetch: Fetcher, errors: string[]): Pro
       primaryRepository: repo && repositoryIdRef ? { id: repositoryId(repositoryIdRef), owner: String(repo.owner ?? ""), name: String(repo.name ?? "") } : null,
       sdkPackageVersion,
     });
+    if (!parsePublishedAiReview({ ...doc, productId: productIdRef, mappingKey: calculated, state: "published",
+      signals: signals.map((signal) => ({ ...signal, checkedAt: signal.checkedAt ?? null, evidence: signal.evidence ?? [] })),
+    }, new Date())) errors.push("AI-review evidence, dates, signal states or types kind are invalid.");
     return calculated;
   } catch {
     errors.push("The current product package and repository mapping is invalid.");

@@ -13,6 +13,7 @@ export interface MetricReadValue {
   readonly status: "ok" | "error" | "unknown" | "not_applicable" | "not_collected";
   readonly reason: string | null;
   readonly value: number | string | null;
+  readonly lastAttemptAt: UtcDateTime | null;
   readonly observedAt: UtcDateTime | null;
   readonly fetchedAt: UtcDateTime | null;
   readonly periodStart: string | null;
@@ -54,6 +55,7 @@ function missingValue(mapping: MappingIdentity, source: "npm" | "github", metric
     status: expected ? "not_collected" : "not_applicable",
     reason: expected ? "metrics_not_collected" : "source_not_selected",
     value: null,
+    lastAttemptAt: null,
     observedAt: null,
     fetchedAt: null,
     periodStart: null,
@@ -94,6 +96,7 @@ export function buildMetricsReadModel(input: {
         status: row.lastStatus,
         reason: row.lastReason,
         value: row.validValue,
+        lastAttemptAt: row.lastAttemptAt,
         observedAt: row.validObservedAt,
         fetchedAt: row.validFetchedAt,
         periodStart: row.validPeriodStart,

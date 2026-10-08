@@ -85,7 +85,7 @@ export function isAllowedCollectReportPath(
   return roots.some((root) => isWithinDirectory(root, destination));
 }
 
-function loadLocalEnvironment(): void {
+export function loadLocalEnvironment(): void {
   try {
     const require = createRequire(import.meta.url);
     const { loadEnvConfig } = require("@next/env") as { loadEnvConfig: (directory: string, dev: boolean, logger?: { info(): void; error(): void }) => unknown };

@@ -105,6 +105,7 @@ export interface AiSignalEvidence {
 export interface AiSignal {
   readonly key: AiSignalKey;
   readonly state: AiSignalState;
+  readonly reason?: string;
   readonly scope: string;
   readonly checkedAt: UtcDateTime | null;
   readonly evidence: readonly AiSignalEvidence[];
@@ -208,6 +209,7 @@ function projectAiReview(input: unknown): AiReviewProjection | undefined {
     return {
       key: signalKey as AiSignalKey,
       state: signal.state as AiSignalState,
+      ...(ownString(signal.reason) ? { reason: signal.reason } : {}),
       scope: signal.scope,
       checkedAt: signal.checkedAt as UtcDateTime | null,
       evidence: evidence as AiSignalEvidence[],

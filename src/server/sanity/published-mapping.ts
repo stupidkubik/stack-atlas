@@ -1,3 +1,4 @@
+import { readAiSdkVersion } from "../../domain/ai-review-version";
 import "server-only";
 
 import { createClient } from "@sanity/client";
@@ -99,20 +100,6 @@ function validGithubPart(value: unknown): value is string {
   return nonEmpty(value) && /^[A-Za-z0-9_.-]{1,100}$/.test(value) && value !== "." && value !== "..";
 }
 
-function packageVersion(review: RecordValue | undefined): string | null | undefined {
-  if (!review) return null;
-  const signals = list(review.signals);
-  if (!signals) return undefined;
-  const types = signals.map(record).filter((signal) => signal?.key === "types");
-  if (types.length !== 1) return undefined;
-  const evidence = list(types[0]?.evidence);
-  if (!evidence) return undefined;
-  const versions = evidence.map(record).flatMap((item) => item?.packageVersion === undefined ? [] : [item.packageVersion]);
-  if (versions.some((version) => !nonEmpty(version))) return undefined;
-  const uniqueVersions = [...new Set(versions as string[])];
-  if (uniqueVersions.length > 1) return undefined;
-  return uniqueVersions[0] ?? null;
-}
 
 /** Strict mapping projection shared by the collector and mapping-key review. */
 export async function projectPublishedMappings(query: Query, requestedProductIds?: readonly ProductId[]): Promise<readonly PublishedMetricsMapping[] | undefined> {
@@ -176,7 +163,7 @@ export async function projectPublishedMappings(query: Query, requestedProductIds
     const content = contentsByProduct.get(id);
     if (!content || content._id !== productContentDocumentId(id) || (primaryPackageId === undefined && !nonEmpty(content.noPackageReason))) return undefined;
     const review = reviewsByProduct.get(id);
-    const sdkPackageVersion = packageVersion(review);
+    const sdkPackageVersion = readAiSdkVersion(review);
     if (sdkPackageVersion === undefined || (sdkPackageVersion !== null && !primaryPackageId)) return undefined;
     const primaryPackage: MappingIdentity["primaryPackage"] = primaryPackageDoc
       ? { id: packageId(primaryPackageDoc._id as string), packageName: primaryPackageDoc.packageName as string }

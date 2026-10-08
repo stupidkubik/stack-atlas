@@ -22,7 +22,7 @@ export interface AiReadinessSignal {
   readonly checkedAt: UtcDateTime | null;
   readonly evidence: readonly AiReadinessEvidence[];
   readonly kind?: AiTypesKind | null;
-  readonly reason?: "mapping_changed" | "review_missing" | "no_comparable_sdk";
+  readonly reason?: string;
 }
 
 export interface AiReadiness {
@@ -65,7 +65,7 @@ function validReviewTime(value: unknown, now: Date): value is UtcDateTime {
   return isUtcDateTime(value) && Date.parse(value) <= now.getTime() + maxFutureSkewMs;
 }
 
-function parseReview(input: unknown, now: Date): ParsedReview | undefined {
+export function parsePublishedAiReview(input: unknown, now: Date): ParsedReview | undefined {
   const review = plainDataRecord(input);
   if (
     !review || !isProductId(review.productId) || review.state !== "published" ||
@@ -112,9 +112,12 @@ function parseReview(input: unknown, now: Date): ParsedReview | undefined {
       if (!(signal.kind === undefined || signal.kind === null || ["bundled", "external", "none"].includes(String(signal.kind)))) return undefined;
     } else if (signal.kind !== undefined && signal.kind !== null) return undefined;
 
+    const officialMissing = state === "present" && signal.key !== "types" &&
+      !evidence.some((item) => item?.officialSourceUrl);
     return {
       key: signal.key as AiReadinessKey,
-      state,
+      state: officialMissing ? "unknown" : state,
+      ...(officialMissing ? { reason: "official_evidence_missing" } : isNonEmpty(signal.reason) ? { reason: signal.reason } : {}),
       scope: signal.scope,
       checkedAt: signal.checkedAt as UtcDateTime | null,
       evidence: evidence as AiReadinessEvidence[],
@@ -162,7 +165,7 @@ export function calculateAiReadiness(input: {
     return { ...base, completeness: "not_applicable", signals: emptySignals("not_applicable", "no_comparable_sdk") };
   }
 
-  const review = parseReview(input.publishedReview, now);
+  const review = parsePublishedAiReview(input.publishedReview, now);
   if (!review || review.productId !== input.productId) {
     return { ...base, completeness: "incomplete", signals: emptySignals("unknown", "review_missing") };
   }
