@@ -42,7 +42,7 @@
 | LM-07 | [Добавить event allowlist, атрибуцию и accepted funnel](../plans/04-leads-consent-and-measurement.md) | review | 20261006T072355Z-LM-07-5c99fef0 | 2026-10-06T21:26:22Z |
 | LM-08 | [Пройти независимый вертикальный прототип формы и измерения](../plans/04-leads-consent-and-measurement.md) | review | 20261007T213134Z-LM-08-6b11ee36 | 2026-10-08T20:39:52Z |
 | LM-09 | [Ввести TTL и удаление заявок в Brevo и БД](../plans/04-leads-consent-and-measurement.md) | planned | — | — |
-| QA-01 | [CI и единый набор доказательств](../plans/05-quality-operations-and-release.md) | planned | 20261006T151840Z-QA-01-d2637cf4 | 2026-10-06T15:27:17Z |
+| QA-01 | [CI и единый набор доказательств](../plans/05-quality-operations-and-release.md) | planned | 20261008T211710Z-QA-01-d31ad8f6 | 2026-10-08T21:30:33Z |
 | QA-02 | [Сквозная приёмка и отказные сценарии](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-03 | [Доступность и performance](../plans/05-quality-operations-and-release.md) | planned | — | — |
 | QA-04 | [Maintenance, расписание и restore rehearsal](../plans/05-quality-operations-and-release.md) | planned | — | — |
