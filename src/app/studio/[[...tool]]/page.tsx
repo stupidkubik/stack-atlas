@@ -1,8 +1,10 @@
-"use client";
+import { readEmbeddedStudioSettings } from "../../../server/sanity/embedded-studio";
+import { EmbeddedStudio } from "./embedded-studio";
 
-import { NextStudio } from "next-sanity/studio";
-import config from "../../../../sanity.config";
+export const dynamic = "force-dynamic";
 
 export default function StudioPage() {
-  return <NextStudio config={config} />;
+  const settings = readEmbeddedStudioSettings();
+  if (!settings) return <main><h1>Studio unavailable in fixture mode</h1><p>Run Studio with an explicitly configured live content target.</p></main>;
+  return <EmbeddedStudio projectId={settings.projectId} dataset={settings.dataset} previewOrigin={settings.previewOrigin} />;
 }
