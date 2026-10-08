@@ -1,0 +1,56 @@
+name: Fixture browser acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fixture-browser-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fixture-browser:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/work/foundation-first-pass' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      APP_ENV: fixture
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Check out the reviewed branch
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node version
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Install the pinned npm version
+        run: npm install --global npm@12.0.2
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check source contracts
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Install Chromium
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Set the local evidence identifier
+        run: echo "PKGCOMPASS_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-QA-01-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Check the isolated fixture browser path
+        run: npm run test:e2e:fixture
+
+      # Browser request bodies and credentials must never enter retained traces.
+      # The suite disables traces/screenshots/video and removes test output.
+      # This narrow manual job does not claim the full QA-01 DB/build/axe matrix.
