@@ -3,13 +3,15 @@ import "server-only";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { buildPublishedAiReadiness, type PublishedAiMapping } from "./ai-review";
 import type { AiReadiness } from "../../domain/ai-readiness";
+import { packageId, repositoryId } from "../../domain/ids";
 import type { MappingIdentity } from "../../domain/data-contracts";
 import type { MetricReadValue } from "../../domain/metrics-read-model";
 import { comparisonPath } from "../../domain/public-urls";
 import { selectComponentTarget } from "../config/targets";
 import { createPooledMetricsReader } from "../db/connections";
 import { readMetricsForMappings } from "../db/metrics-repository";
-import { readPublishedMappings } from "../sanity/published-mapping";
+import { readAiSdkVersion } from "../../domain/ai-review-version";
+import { computeMappingKey } from "../../domain/mapping-key";
 import { getPublishedCatalogRead, type CmsPublicProduct } from "../sanity/public-read";
 
 export type CatalogMetricsReadResult =
@@ -32,6 +34,7 @@ export async function readCatalogMetrics(input: {
 export type PublicProductRead =
   | { readonly status: 404 }
   | { readonly status: 503 }
+  | { readonly status: 308; readonly location: string }
   | {
       readonly status: 200;
       readonly product: CmsPublicProduct;
@@ -46,28 +49,32 @@ export async function readPublicProduct(slug: string, now = new Date()): Promise
   const cms = await getPublishedCatalogRead();
   if (cms.status !== 200) return { status: 503 };
   const product = cms.model.products.find(({ product: value }) => value.routeSlug === slug);
-  if (!product) return { status: 404 };
+  if (!product) {
+    const redirect = cms.model.redirects.find(({ sourcePath }) => sourcePath === `/en/tools/${slug}/`);
+    return redirect ? { status: 308, location: redirect.targetPath } : { status: 404 };
+  }
 
-  const mapped = await readPublishedMappings([product.product.id]);
-  const mapping = mapped.ok ? mapped.value.find(({ productId }) => productId === product.product.id) : undefined;
   const comparisons = cms.model.comparisons.flatMap(({ comparison, content }) => {
     if (!comparison.productIds.includes(product.product.id)) return [];
     const products = comparison.productIds.map((id) => cms.model.products.find(({ product: candidate }) => candidate.id === id)?.product);
     return products[0] && products[1] ? [{ content, href: comparisonPath([products[0], products[1]]) }] : [];
   });
-  if (!mapping) return { status: 200, product, source: cms.source, metrics: { status: "unavailable" }, comparisons };
-
+  // Metrics use only the selected source identity in the public CMS projection.
+  // AI evidence/version validation must never hide otherwise valid metrics.
+  const selectedPackage = product.packages.find(({ id }) => id === product.product.primaryPackageId);
+  const selectedRepository = product.repositories.find(({ id }) => id === product.product.primaryRepositoryId);
   const domainMapping: MappingIdentity = {
-    productId: mapping.productId,
-    primaryPackage: mapping.primaryPackage,
-    primaryRepository: mapping.primaryRepository,
-  };
-  const readinessMapping: PublishedAiMapping = {
-    productId: mapping.productId,
-    mappingKey: mapping.mappingKey,
-    hasComparableSdk: Boolean(mapping.primaryPackage),
+    productId: product.product.id,
+    primaryPackage: selectedPackage ? { id: packageId(selectedPackage.id), packageName: selectedPackage.packageName } : null,
+    primaryRepository: selectedRepository ? { id: repositoryId(selectedRepository.id), owner: selectedRepository.owner, name: selectedRepository.name } : null,
   };
   const review = cms.model.catalog.products.find(({ product: value }) => value.id === product.product.id)?.aiReview;
+  const sdkPackageVersion = domainMapping.primaryPackage ? readAiSdkVersion(review) : null;
+  const readinessMapping: PublishedAiMapping = {
+    productId: domainMapping.productId,
+    mappingKey: sdkPackageVersion === undefined ? "invalid_review_version" : await computeMappingKey({ ...domainMapping, sdkPackageVersion }),
+    hasComparableSdk: Boolean(domainMapping.primaryPackage),
+  };
   const aiReadiness = buildPublishedAiReadiness({
     mappings: [readinessMapping],
     publishedReviews: review ? [review] : [],

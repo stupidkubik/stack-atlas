@@ -338,8 +338,9 @@ function projectAiReview(input: RecordValue): AiReviewProjection | undefined {
   const signalKeys = ["types", "llmsTxt", "mcp"] as const;
   if (!product || !/^prd_[a-z0-9_]+$/.test(product) || input._id !== aiReviewDocumentId(product) || !text(input.mappingKey) || !text(input.methodologyVersion) || !text(input.reviewerLabel) || !validDate(input.reviewedAt) || !signalsInput || signalsInput.length !== 3) return undefined;
   const signals = signalsInput.map((signalInput, index): AiSignal | undefined => {
-    const signal = record(signalInput); const key = signal?.key; const evidenceInputs = list(signal?.evidence);
-    if (!signal || key !== signalKeys[index] || !["present", "absent", "unknown", "error", "not_applicable"].includes(String(signal.state)) || !text(signal.scope) || !(signal.checkedAt === null || validDate(signal.checkedAt)) || !evidenceInputs) return undefined;
+    const signal = record(signalInput); const key = signal?.key; const evidenceInputs = list(signal?.evidence ?? []);
+    const checkedAt = signal?.checkedAt ?? null;
+    if (!signal || key !== signalKeys[index] || !["present", "absent", "unknown", "error", "not_applicable"].includes(String(signal.state)) || !text(signal.scope) || !(checkedAt === null || validDate(checkedAt)) || !evidenceInputs) return undefined;
     const evidence = evidenceInputs.map((evidenceInput) => {
       const item = record(evidenceInput);
       const officialSourceUrl = item?.officialSourceUrl === null ? undefined : item?.officialSourceUrl;
@@ -363,8 +364,9 @@ function projectAiReview(input: RecordValue): AiReviewProjection | undefined {
     return {
       key: key as AiSignal["key"],
       state: signal.state as AiSignal["state"],
+      ...(text(signal.reason) ? { reason: signal.reason } : {}),
       scope: signal.scope,
-      checkedAt: signal.checkedAt as UtcDateTime | null,
+      checkedAt: checkedAt as UtcDateTime | null,
       evidence: evidence as NonNullable<AiSignal["evidence"]>,
       ...(key === "types" && kind !== undefined ? { kind: kind as AiSignal["kind"] } : {}),
     };
@@ -538,7 +540,7 @@ export async function projectPublishedCmsRead(query: Query): Promise<CmsPublicRe
   const redirectCounts = new Map<string, number>();
   for (const item of redirectCandidates) if (text(item.sourcePath)) redirectCounts.set(item.sourcePath, (redirectCounts.get(item.sourcePath) ?? 0) + 1);
   const redirects = redirectCandidates.flatMap((item) => {
-    if (!text(item.sourcePath) || !text(item.targetPath) || item.sourcePath === item.targetPath || item.statusCode !== 308 || !/^\/[a-z0-9/-]+\/$/.test(item.sourcePath) || !/^\/[a-z0-9/-]+\/$/.test(item.targetPath) || redirectCounts.get(item.sourcePath) !== 1 || !publishedPaths.has(item.targetPath) || redirectCandidates.some((other) => other.sourcePath === item.targetPath)) return [];
+    if (!text(item.sourcePath) || !text(item.targetPath) || item.sourcePath === item.targetPath || item.statusCode !== 308 || !/^\/[a-z0-9/-]+\/$/.test(item.sourcePath) || !/^\/[a-z0-9/-]+\/$/.test(item.targetPath) || redirectCounts.get(item.sourcePath) !== 1 || publishedPaths.has(item.sourcePath) || !publishedPaths.has(item.targetPath) || redirectCandidates.some((other) => other.sourcePath === item.targetPath)) return [];
     return [{ sourcePath: item.sourcePath, targetPath: item.targetPath, createdAt: validDate(item.createdAt) ? item.createdAt : "", reason: text(item.reason) ? item.reason : "" }];
   });
 
@@ -641,6 +643,8 @@ export async function getPublishedComparisonRouteContext(slug: string): Promise<
   const result = await getPublishedCatalogRead();
   if (result.status !== 200) return { kind: "unavailable" };
   const pair = slug.endsWith("/") ? slug.slice(0, -1) : slug;
+  const redirect = result.model.redirects.find(({ sourcePath }) => sourcePath === `/en/compare/${pair}/`);
+  if (redirect) return { kind: "redirect", location: redirect.targetPath };
   const productSlugs = pair.split("-vs-");
   if (productSlugs.length !== 2 || productSlugs.some((part) => !part)) return { kind: "missing" };
   const [firstSlug, secondSlug] = productSlugs;

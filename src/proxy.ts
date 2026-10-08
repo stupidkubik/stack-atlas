@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAppEnvironment } from "./server/config/environment";
-import { catalogPreflightOrigin, trustedOrigins } from "./server/config/origins";
+import { catalogPreflightRequest, trustedOrigins } from "./server/config/origins";
 
 function unavailable(): Response {
   return new Response("<!doctype html><html lang=\"en\"><head><title>Content temporarily unavailable | PkgCompass</title><meta name=\"robots\" content=\"noindex\"></head><body><main><h1>Content temporarily unavailable</h1><p>Please try again later.</p></main></body></html>", {
@@ -15,11 +15,16 @@ export async function proxy(request: NextRequest): Promise<Response> {
     const environment = resolveAppEnvironment();
     // NextURL normalizes loopback IPs to localhost. Match Host against owner
     // configuration, then fetch only that configured origin.
-    const origin = catalogPreflightOrigin(trustedOrigins(environment), request.headers.get("host"));
-    if (!origin) return unavailable();
+    const selfIdentity = process.env.VERCEL_URL ? {
+      origin: `https://${process.env.VERCEL_URL.trim().toLowerCase()}`,
+      // Vercel supplies fresh workload identity on each runtime request. The
+      // build-time VERCEL_OIDC_TOKEN is deliberately not reused here.
+      token: request.headers.get("x-vercel-oidc-token") ?? undefined,
+    } : undefined;
+    const preflight = catalogPreflightRequest(trustedOrigins(environment), request.headers, selfIdentity);
+    if (!preflight) return unavailable();
     if (environment === "fixture") return NextResponse.next();
-    const statusUrl = new URL("/api/catalog-status/", origin);
-    const response = await fetch(statusUrl, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(12_000) });
+    const response = await fetch(preflight.url, { headers: preflight.headers, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(12_000) });
     if (response.status !== 200) return unavailable();
     const value: unknown = await response.json();
     if (!value || typeof value !== "object" || !("available" in value) || value.available !== true) return unavailable();
