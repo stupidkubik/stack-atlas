@@ -166,3 +166,36 @@ Read-only проверка авторизованных экранов выпо�
 | PostHog | Public pricing/docs: 1M events/month on free tier, event retention 1 year; [retention API](https://posthog.com/docs/api/events-retention) read-only и определяется plan | Фактическое account window и возможность 90 дней; при недоступности — ежемесячная очистка по spec 10 до release |
 | Vercel | Hobby: personal/non-commercial; cron at most daily, ±59 min; one selected function region | Eligibility/use, Cron enabled, function region, monthly included resource usage |
 | GitHub Actions | Standard hosted runner minutes free for public repos; private repos use plan allowance then billable | Repository visibility, account plan, billing budget/usage and workflow availability |
+
+
+## DP-06: повторная invalidation без сбора метрик
+
+Если collector записал метрики, но сообщил `cacheInvalidation: failed`, повторить только invalidation для нужных опубликованных product IDs:
+
+```sh
+APP_ENV=development npm run cache:refresh -- --env development --product-id prd_sanity
+```
+
+Повторить `--product-id` для нескольких продуктов (до 50, без дублей). Команда использует настроенный `SITE_URL` и `IMPORT_INVALIDATION_SECRET`, не читает источники и не записывает БД. Для защищённого Preview действуют те же ограничения OIDC/ref, что и для collector; fixture/PR не получает live target. Production требует отдельного `--allow-production` и разрешённого production окружения.
+
+Карточка читает SQL напрямую на каждом динамическом запросе, поэтому кеш метрик не задерживает обновление при отказе invalidation. Публичная CMS-проекция сохраняет свой TTL 3600 s и publication webhook. При ошибке источника UI показывает last-valid со старой датой/периодом, свежестью 48 часов и отдельной датой последней попытки. Отказ SQL оставляет редакционный контент доступным.
+
+
+## Прототипные проверки DP-07 и LM-08
+
+AI-readiness использует ту же опубликованную CMS-проекцию, что и карточка: повторный запрос mapping не нужен для score. Публикация `aiReview` очищает общий CMS cache через подписанный webhook. Studio показывает `Review due`, когда самая ранняя дата сигнала опубликованного review старше 75 дней. Положительные llms.txt/MCP findings требуют ссылки на официальный CMS источник; community-only evidence не начисляет официальный балл. Неизвестные/ошибочные findings сохраняют публичную причину; пустые необязательные evidence допустимы для незавершённых проверок.
+
+Повторяемая браузерная проверка формы/consent с полностью перехваченными lead и analytics запросами:
+
+```sh
+APP_ENV=development SITE_URL=http://127.0.0.1:3000 node scripts/dev/measurement-browser-smoke.mjs --env=development --offline-fixture
+```
+
+Она не создаёт CRM-контакты и не отправляет analytics провайдеру. Ошибки CRM/БД и потеря ответа моделируются ответами fake API; реальные adapters проверяются отдельно. В реестре задач эти доказательства не подменяют live gates.
+
+Read-only development HogQL запрос — `developmentComparisonFunnelQuery` в `src/domain/measurement-funnel.ts`; synthetic reference — `summarizeComparisonFunnel`. Счётчики unique visitors и unique conversionId раздельны; сравнение → форма → accepted проверяется в пределах семи суток включительно. Время берётся через `toDateTime64` напрямую: PostHog может уже распознать `occurredAt` как DateTime64, поэтому строковая нормализация через `replaceAll` некорректна. Проверка через SQL UI не сохраняет dashboard; production dashboard остаётся отдельной задачей.
+
+
+## CMS prototype acceptance 8 октября
+
+Подписанный webhook с пятиключевой `rule.projection` проверен на защищённом development Preview: actual Studio AI-review publish и изолированные publish/update/unpublish/rename обновили HTML без deploy. Временный Automation Bypass был отдельно разрешён владельцем и **отозван после приёмки**; его header удалён из Sanity, временный credentialed Preview CORS удалён, localhost:3333 сохранён. Development webhook сейчас **disabled**, чтобы не отправлять запросы после отзыва доступа. Постоянный защищённый delivery target требуется до регулярной публикации; production protection не менялась. Подробные результаты и ограничения — [прототипный отчёт](../work/journal/2026-10-08-prototype-review.md).
