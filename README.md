@@ -1,6 +1,6 @@
 # PkgCompass
 
-Каталог headless CMS для JS/TS-сайтов. Каркас, автономные fixtures и доменные миграции проверены; текущий проход foundation проверяет development adapters. Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md); полная готовность live-путей и каталога пока не подтверждена.
+Каталог headless CMS для JS/TS-сайтов. Development-прототип CMS → публичный HTML → форма → Brevo → consented PostHog проверен; результаты и границы — в [итоговой приёмке FP-05](docs/work/journal/2026-10-08-fp05-final.md). Фактическое состояние задач — в [рабочем реестре](docs/work/tasks.md). Полный контент, дизайн, эксплуатация и production release ещё предстоят.
 
 ## Начало работы
 
@@ -42,9 +42,9 @@ npm run start
 
 Стартовая страница — `/en/`, `/` перенаправляет на неё. Локально доступны synthetic каталог, CMS detail/comparison и форма; полная live-приёмка и публичный release ещё не завершены. `npm run dev` запускает Next.js для разработки. Для каркаса `.env` и внешние аккаунты не нужны.
 
-`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-02. Локальный запуск и production build Studio проверены; полный browser editing flow ещё не проверен.
+`npm run studio` и `npm run studio:build` требуют выделенных `SANITY_STUDIO_PROJECT_ID` и `SANITY_STUDIO_DATASET`. Эти два значения публичные, секретные токены в Studio не передаются. Схемы относятся к CW-02. Проверены build и настоящая Studio UI-публикация synthetic AI-review с automatic webhook; полная редакционная приёмка остаётся в CW/QA.
 
-`npm run test` проверяет foundation config, synthetic fixtures, safe projections и отказные сценарии adapters. Playwright настроен для будущих E2E; пустой запуск `test:e2e` не считается пройденной проверкой. Для E2E требуется `PKGCOMPASS_RUN_ID` текущего run: traces сохраняются в его `evidence/playwright/`. Отчёты не размещаются в tracked files. `next-env.d.ts` создаётся `next typegen` перед проверкой типов и исключён из Git.
+`npm run test` проверяет foundation config, synthetic fixtures, safe projections и отказные сценарии adapters. Для автономного browser path использовать `PKGCOMPASS_RUN_ID=<RUN-ID> CI=true npm run test:e2e:fixture`: отдельная копия приложения без `.env`, loopback-only browser network, in-memory CRM/DB и intercepted unavailable/lost-response сценарии. Granted SDK/provider lifecycle подтверждён отдельно в development evidence; fixture runtime отключает measurement. Browser traces/screenshots/video отключены, результаты идут в текущий run. Удалённый CI пока не запускался. `next-env.d.ts` создаётся `next typegen` перед проверкой типов и исключён из Git.
 
 ## Targets и автономный режим
 
@@ -89,7 +89,7 @@ TypeScript connection factories в `src/server/db/` используют пол�
 
 [Справочник регистраций и ключей](docs/setup/development-services.md) описывает Sanity development dataset, Neon dev branch, Brevo dev list, PostHog EU project и подготовку GitHub/Vercel. В нём разделены публичные identifiers, provider credentials и самостоятельно генерируемые секреты, указаны места хранения и официальные источники условий сервисов.
 
-Публичные условия и авторизованные account Plan/Usage экраны сверены 5 октября 2026; результаты и ограничения — в [development services](docs/setup/development-services.md#проверенные-параметры-аккаунтов). Development credentials настроены локально. Проверены права четырёх Neon ролей; в Sanity development опубликованы 28 собственных synthetic fixtures для пяти CMS. Publisher повторно подтвердил точный owned set без новых записей. Next.js Preview готов; branch-specific переменные настроены владельцем. Окно PostHog retention 90 дней, live API формы/Brevo, полный analytics funnel и dispatch ещё не подтверждены. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена.
+Публичные условия и авторизованные account Plan/Usage экраны сверены 5 октября 2026; результаты и ограничения — в [development services](docs/setup/development-services.md#проверенные-параметры-аккаунтов). Проверены права четырёх Neon ролей, synthetic seed пяти CMS, Next.js Preview, live API формы/Brevo, consented EU PostHog ingestion и development dispatch. Окно PostHog retention 90 дней, сохранённый analytics report, production расписание и эксплуатация остаются отдельными проверками. Временный webhook access отозван после приёмки; перед регулярной редакторской работой нужен постоянный dev delivery target. Значения ключей сохраняются непосредственно в secret stores; справочник и `.env.example` содержат только имена.
 
 ### Проверки dev targets
 
@@ -105,7 +105,7 @@ Sanity проверяет aggregate counts с published perspective и preview t
 
 `npm run dev:check:brevo-contact -- --env development` — отдельная **write**-проверка только с выделенным alias владельца из локальной `FP04_TEST_EMAIL`, который не используется в production. Если контакт уже существует, проверка отказывается его менять. Созданный проверкой контакт проверяется через настоящий adapter upsert/repeat и удаляется с подтверждением очистки. Emails/campaigns не отправляются. Alias не добавлять в tracked файлы, command line, fixture, журнал или reports; после smoke убрать его из локального файла, когда он больше не нужен.
 
-CRM entry point `createCrmContacts` в `src/server/crm/` выбирает fake или Brevo по server config; форма использует `/api/leads/`. Publisher/preview/webhook и collector проверены на dev targets. Live API формы с Brevo и полный PostHog funnel ещё требуют разрешённых внешних smoke; workflow dispatch требует публикации подготовленного workflow и credential. Итог и точные ограничения — в [отчёте FP-04](docs/work/journal/2026-10-06-fp04-review.md).
+CRM entry point `createCrmContacts` в `src/server/crm/` выбирает fake или Brevo по server config; форма использует `/api/leads/`. Publisher/preview/webhook, collector, собственная development заявка и provider smoke подтверждены раздельными live evidence. Итоговый combined path и эксплуатационные ограничения — в [приёмке FP-05](docs/work/journal/2026-10-08-fp05-final.md); новые live smoke требуют точного development target и безопасной очистки.
 
 ## Документы и результаты
 
