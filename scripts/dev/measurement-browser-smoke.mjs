@@ -89,6 +89,14 @@ async function main() {
   const blockedPosthogHostKinds = { expectedEu: 0, euAssets: 0, euAlias: 0, otherPosthog: 0 };
   const blockedPosthogPathKinds = { event: 0, ingestion: 0, flags: 0, remoteConfig: 0, other: 0 };
   let offlinePosthogFixtures = 0;
+  // All form writes are fulfilled in memory. Even a missing fixture must never
+  // fall through to the development API/CRM.
+  const leadFixtures = [];
+  const leadAttempts = [];
+  let unexpectedLeadRequest = false;
+  let blockAnalyticsTransport = false;
+  let intentionallyBlockedAnalyticsRequests = 0;
+  const conversionFixture = "11111111-1111-4111-8111-111111111111";
   await context.route("**/*", async (route) => {
     let requestUrl;
     try { requestUrl = new URL(route.request().url()); } catch {
@@ -97,6 +105,20 @@ async function main() {
       return;
     }
     if (requestUrl.origin === origin) {
+      if (requestUrl.pathname === "/api/leads/" && route.request().method() === "POST") {
+        const fixture = leadFixtures.shift();
+        if (!fixture) {
+          unexpectedLeadRequest = true;
+          await route.abort();
+          return;
+        }
+        leadAttempts.push(route.request().postDataJSON());
+        fixture.started?.();
+        if (fixture.release) await fixture.release;
+        if (fixture.abort) await route.abort();
+        else await route.fulfill({ status: fixture.status ?? 200, contentType: "application/json", body: JSON.stringify(fixture.body) });
+        return;
+      }
       await route.continue();
       return;
     }
@@ -126,6 +148,11 @@ async function main() {
               : "other";
         blockedPosthogHostKinds.expectedEu += 1;
         blockedPosthogPathKinds[pathKind] += 1;
+        if (blockAnalyticsTransport) {
+          intentionallyBlockedAnalyticsRequests += 1;
+          await route.abort();
+          return;
+        }
         collectPosthogRequest(route.request());
         if (route.request().method() === "POST" && (pathKind === "event" || pathKind === "ingestion")) {
           offlinePosthogFixtures += 1;
@@ -156,6 +183,55 @@ async function main() {
     Object.defineProperty(Navigator.prototype, "userAgent", { configurable: true, get: () => browserUserAgent });
     Object.defineProperty(Navigator.prototype, "webdriver", { configurable: true, get: () => false });
     Object.defineProperty(Navigator.prototype, "userAgentData", { configurable: true, get: () => undefined });
+    // Observe transport invocation and the actual cookie-write boundary in the
+    // browser's synchronous execution order. Route callbacks may arrive later.
+    const transport = { starts: [], denialStartCount: null };
+    window.__pkgcompassSmokeTransport = transport;
+    const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+    const choice = () => {
+      try {
+        const cookie = cookieDescriptor.get.call(document).split(";").map((part) => part.trim())
+          .find((part) => part.startsWith("pkgcompass_consent_v1="));
+        return cookie ? JSON.parse(decodeURIComponent(cookie.slice("pkgcompass_consent_v1=".length))).state : "unknown";
+      } catch { return "unknown"; }
+    };
+    Object.defineProperty(Document.prototype, "cookie", {
+      configurable: cookieDescriptor.configurable,
+      enumerable: cookieDescriptor.enumerable,
+      get() { return cookieDescriptor.get.call(this); },
+      set(value) {
+        cookieDescriptor.set.call(this, value);
+        if (String(value).startsWith("pkgcompass_consent_v1=")) {
+          transport.denialStartCount = choice() === "denied" ? transport.starts.length : null;
+        }
+      },
+    });
+    const isPosthog = (value) => {
+      try { return new URL(typeof value === "string" ? value : value.url ?? String(value), location.href).hostname.endsWith("posthog.com"); }
+      catch { return false; }
+    };
+    const record = (kind) => transport.starts.push({ kind, consent: choice() });
+    const originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+      if (isPosthog(input)) record("fetch");
+      return originalFetch.call(this, input, init);
+    };
+    const xhrTargets = new WeakMap();
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(...args) {
+      xhrTargets.set(this, isPosthog(args[1]));
+      return originalOpen.apply(this, args);
+    };
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function(...args) {
+      if (xhrTargets.get(this)) record("xhr");
+      return originalSend.apply(this, args);
+    };
+    const originalBeacon = navigator.sendBeacon;
+    navigator.sendBeacon = function(url, data) {
+      if (isPosthog(url)) record("beacon");
+      return originalBeacon.call(this, url, data);
+    };
   });
   const state = {
     consentGranted: false,
@@ -192,8 +268,10 @@ async function main() {
       const properties = event.properties && typeof event.properties === "object" ? event.properties : {};
       if (Object.keys(properties).some((key) => !allowedPropertyNames.has(key))) state.eventsSafe = false;
       if (properties.token !== expectedToken || typeof properties.distinct_id !== "string") state.eventsSafe = false;
-      if (event.event === "page_viewed" && properties.routeType !== "lead_form") state.eventsSafe = false;
+      if (event.event === "page_viewed" && !["lead_form", "comparison"].includes(properties.routeType)) state.eventsSafe = false;
       if (event.event === "lead_form_viewed" && properties.routeType !== "lead_form") state.eventsSafe = false;
+      if (event.event === "comparison_viewed" && (properties.routeType !== "comparison" ||
+        properties.comparisonId !== "cmp_contentful_sanity_fixture")) state.eventsSafe = false;
     }
   }
   page.on("requestfinished", async (request) => {
@@ -227,6 +305,32 @@ async function main() {
     throw error;
   }
 
+  async function fillForm() {
+    // SSR controls are visible before hydration. Wait for React's submit handler
+    // before typing so a reload cannot silently discard synthetic field edits.
+    await page.waitForFunction(() => {
+      const form = document.querySelector("form");
+      if (!form) return false;
+      return Object.keys(form).some((key) => key.startsWith("__reactProps") && typeof form[key]?.onSubmit === "function");
+    });
+    await page.getByLabel("Email address", { exact: true }).fill("lm08-synthetic@example.invalid");
+    await page.getByLabel("What kind of site are you choosing for?", { exact: true }).selectOption("marketing_site");
+    await page.getByRole("checkbox").check();
+  }
+  async function clickConsentButton(name) {
+    await page.waitForFunction((label) => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === label);
+      return button && Object.keys(button).some((key) => key.startsWith("__reactProps") && typeof button[key]?.onClick === "function");
+    }, name);
+    await page.getByRole("button", { name, exact: true }).click();
+  }
+  async function submitFixture(fixture) {
+    leadFixtures.push(fixture);
+    await page.getByRole("button", { name: "Request a shortlist", exact: true }).click();
+  }
+  const eligibleAccepted = { status: "accepted", analyticsEligible: true, conversionId: conversionFixture };
+  const conversionCount = () => state.eventNames.filter((name) => name === "lead_accepted").length;
+
   let failurePhase;
   try {
     currentPhase = "initial_navigation";
@@ -246,8 +350,17 @@ async function main() {
     }));
     requireSafe(initialStorage.session.length === 0 && initialStorage.local.length === 0, "optional_storage_before_choice");
 
+    currentPhase = "no_consent_form_accepted";
+    await fillForm();
+    await submitFixture({ body: eligibleAccepted });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    requireSafe(state.posthogRequests === 0, "no_consent_accepted_sent_analytics");
+    const noConsentStorageCount = await page.evaluate(() => sessionStorage.length + localStorage.length);
+    requireSafe(noConsentStorageCount === 0, "no_consent_accepted_persisted_storage");
+    await page.reload({ waitUntil: "domcontentloaded" });
+
     currentPhase = "denied_reload_checks";
-    await page.getByRole("button", { name: "Reject analytics" }).click();
+    await clickConsentButton("Reject analytics");
     await page.waitForTimeout(200);
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
@@ -255,10 +368,42 @@ async function main() {
     const deniedCookieNames = (await context.cookies()).map((cookie) => cookie.name);
     requireSafe(deniedCookieNames.includes("pkgcompass_consent_v1"), "denied_consent_not_persisted");
 
+    currentPhase = "failure_and_lost_response_retry";
+    await fillForm();
+    await submitFixture({ status: 503, body: { status: "unavailable" } });
+    await page.getByRole("alert").filter({ hasText: "We could not confirm your request. Please retry." }).waitFor();
+    const failedRequestId = leadAttempts.at(-1).requestId;
+    // Permission is mandatory but toggling it must not change operation identity.
+    await page.getByRole("checkbox").uncheck();
+    await page.getByRole("checkbox").check();
+    await submitFixture({ abort: true });
+    await page.getByRole("alert").filter({ hasText: "We could not confirm your request. Please retry." }).waitFor();
+    requireSafe(leadAttempts.at(-1).requestId === failedRequestId, "permission_toggle_changed_retry_identity");
+    await submitFixture({ body: eligibleAccepted });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    requireSafe(leadAttempts.at(-1).requestId === failedRequestId, "lost_response_changed_retry_identity");
+    requireSafe(state.posthogRequests === 0, "denied_retry_sent_analytics");
+
+    currentPhase = "honeypot_form_projection";
+    await page.reload({ waitUntil: "domcontentloaded" });
+    currentPhase = "honeypot_fill";
+    await fillForm();
+    currentPhase = "honeypot_set";
+    await page.locator("#shortlist-website").evaluate((input) => { input.value = "synthetic-honeypot"; });
+    currentPhase = "honeypot_submit";
+    await submitFixture({ body: { status: "accepted", analyticsEligible: false } });
+    currentPhase = "honeypot_accepted";
+    await page.waitForTimeout(300);
+    requireSafe(leadFixtures.length === 0, "honeypot_submit_not_dispatched");
+    requireSafe(!(await page.getByRole("alert").textContent())?.includes("Check the highlighted"), "honeypot_client_validation_error");
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    requireSafe(leadAttempts.at(-1).website === "synthetic-honeypot", "honeypot_not_forwarded");
+    requireSafe(state.posthogRequests === 0, "honeypot_sent_analytics");
+
     currentPhase = "grant_and_direct_reload";
-    await page.getByRole("button", { name: "Privacy settings" }).click();
+    await clickConsentButton("Privacy settings");
     state.consentGranted = true;
-    await page.getByRole("button", { name: "Accept analytics" }).click();
+    await clickConsentButton("Accept analytics");
     await page.waitForFunction(() => {
       const item = document.cookie.split(";").map((part) => part.trim())
         .find((part) => part.startsWith("pkgcompass_consent_v1="));
@@ -320,11 +465,69 @@ async function main() {
     await requireEventCheck(state.eventNames.includes("lead_form_viewed"), "lead_form_viewed_missing_on_granted_load");
     await requireEventCheck(state.eventsSafe, "posthog_event_allowlist_failed");
 
+    currentPhase = "granted_comparison_to_form_journey";
+    // Read the published development page; form responses and analytics stay
+    // offline fixtures. This validates browser wiring, not live CRM integration.
+    await page.goto(new URL("/en/compare/contentful-vs-sanity/", origin).toString(), { waitUntil: "domcontentloaded" });
+    const comparisonCta = page.getByRole("link", { name: "Ask for help choosing between these CMS options", exact: true });
+    await comparisonCta.waitFor({ state: "visible" });
+    for (let attempt = 0; attempt < 20 && !state.eventNames.includes("comparison_viewed"); attempt += 1) {
+      await page.waitForTimeout(100);
+    }
+    await requireEventCheck(state.eventNames.includes("comparison_viewed"), "comparison_viewed_missing_on_granted_visit");
+    const comparisonEventIndex = state.eventNames.lastIndexOf("comparison_viewed");
+    await comparisonCta.click();
+    await page.getByRole("heading", { name: "Request a CMS shortlist", exact: true }).waitFor();
+    await fillForm();
+    requireSafe(await page.locator("[data-entry-point]").getAttribute("data-entry-point") === "comparison", "comparison_cta_entrypoint_lost");
+
+    currentPhase = "granted_accepted_conversion";
+    requireSafe(conversionCount() === 0, "historical_accepted_replayed_after_grant");
+    await fillForm();
+    await submitFixture({ status: 503, body: { status: "unavailable" } });
+    await page.getByRole("alert").filter({ hasText: "We could not confirm your request. Please retry." }).waitFor();
+    requireSafe(conversionCount() === 0, "granted_failure_created_conversion");
+    await submitFixture({ body: eligibleAccepted });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    await page.waitForTimeout(300);
+    requireSafe(conversionCount() === 1, "granted_conversion_not_once");
+    const formEventIndex = state.eventNames.findIndex((name, index) => index > comparisonEventIndex && name === "lead_form_viewed");
+    const acceptedEventIndex = state.eventNames.indexOf("lead_accepted");
+    requireSafe(formEventIndex > comparisonEventIndex && acceptedEventIndex > formEventIndex, "comparison_form_accepted_order_failed");
+    await requireEventCheck(state.eventsSafe, "comparison_journey_event_allowlist_failed");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await fillForm();
+    await submitFixture({ body: eligibleAccepted });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    await page.waitForTimeout(300);
+    requireSafe(conversionCount() === 1, "retry_conversion_duplicated");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await fillForm();
+    await submitFixture({ body: { status: "accepted", analyticsEligible: false } });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    await page.waitForTimeout(300);
+    requireSafe(conversionCount() === 1, "neutral_duplicate_created_conversion");
+
+    currentPhase = "late_success_after_withdrawal";
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await fillForm();
+    let releaseLateResponse;
+    let startedLateResponse;
+    const lateStarted = new Promise((resolve) => { startedLateResponse = resolve; });
+    const release = new Promise((resolve) => { releaseLateResponse = resolve; });
+    leadFixtures.push({ body: { ...eligibleAccepted, conversionId: "22222222-2222-4222-8222-222222222222" }, release, started: startedLateResponse });
+    await page.getByRole("button", { name: "Request a shortlist", exact: true }).click();
+    await lateStarted;
+
     currentPhase = "withdrawal_checks";
-    const beforeWithdrawal = state.posthogRequests;
-    await page.getByRole("button", { name: "Privacy settings" }).click();
-    await page.getByRole("button", { name: "Reject analytics" }).click();
+    await clickConsentButton("Privacy settings");
+    await clickConsentButton("Reject analytics");
     state.consentGranted = false;
+    const withdrawalBoundary = await page.evaluate(() => ({ ...window.__pkgcompassSmokeTransport, starts: [...window.__pkgcompassSmokeTransport.starts] }));
+    requireSafe(withdrawalBoundary.denialStartCount !== null, "actual_denial_boundary_missing");
+    const beforeWithdrawal = state.posthogRequests;
+    releaseLateResponse();
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
     await page.waitForTimeout(300);
     const withdrawnStorage = await page.evaluate(() => {
       const optional = (storage) => Object.keys(storage).filter((key) =>
@@ -340,11 +543,35 @@ async function main() {
       withdrawnCookieNames.length === 1 && withdrawnCookieNames[0] === "pkgcompass_consent_v1",
       "optional_cookie_not_cleared",
     );
+    const afterWithdrawal = await page.evaluate(() => window.__pkgcompassSmokeTransport);
+    requireSafe(afterWithdrawal.starts.length === afterWithdrawal.denialStartCount, "posthog_transport_started_after_actual_denial");
+    const grantedInFlightCallbacks = state.posthogRequests - beforeWithdrawal;
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
-    requireSafe(state.posthogRequests === beforeWithdrawal, "posthog_request_after_withdrawal");
-    requireSafe(state.consoleErrors === 0 && state.pageErrors === 0, "browser_console_error");
+    const deniedReload = await page.evaluate(() => window.__pkgcompassSmokeTransport);
+    requireSafe(deniedReload.starts.length === 0, "posthog_transport_started_on_denied_reload");
+    requireSafe(conversionCount() === 1, "late_success_created_conversion_after_withdrawal");
+    // One intentional abort models a lost API response; Chromium may report it
+    // as a network console error. Script/runtime and SDK errors remain fatal.
+    requireSafe(state.consoleErrorKinds.other === 0 && state.consoleErrorKinds.posthog === 0 && state.pageErrors === 0, "browser_console_error");
+    requireSafe(!unexpectedLeadRequest && leadFixtures.length === 0, "unexpected_unfulfilled_lead_fixture");
     requireSafe(blockedExternalRequests === 0, "unexpected_external_browser_request");
+
+    currentPhase = "blocked_analytics_does_not_break_form";
+    blockAnalyticsTransport = true;
+    await clickConsentButton("Privacy settings");
+    state.consentGranted = true;
+    await clickConsentButton("Accept analytics");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await fillForm();
+    await submitFixture({ body: { ...eligibleAccepted, conversionId: "33333333-3333-4333-8333-333333333333" } });
+    await page.getByRole("heading", { name: "Your request is saved." }).waitFor();
+    await page.waitForTimeout(300);
+    requireSafe(intentionallyBlockedAnalyticsRequests > 0, "blocked_analytics_scenario_not_exercised");
+    requireSafe(!unexpectedLeadRequest && leadFixtures.length === 0 && state.pageErrors === 0, "blocked_analytics_broke_form");
+    await clickConsentButton("Privacy settings");
+    await clickConsentButton("Reject analytics");
+    state.consentGranted = false;
     emit("pass", "posthog_browser_consent_lifecycle", {
       transport: "offline_fixture",
       preConsentRequests: 0,
@@ -352,7 +579,21 @@ async function main() {
       offlinePosthogFixtureResponses: offlinePosthogFixtures,
       acceptedEventTypes: [...new Set(state.eventNames)],
       storageClearedOnWithdrawal: true,
+      denialBoundary: "synchronous_consent_cookie_write",
+      transportStartsAfterDenial: afterWithdrawal.starts.length - afterWithdrawal.denialStartCount,
+      alreadyGrantedCallbacksAfterDenial: grantedInFlightCallbacks,
+      transportStartsOnDeniedReload: deniedReload.starts.length,
       reloadStayedDenied: true,
+      leadTransport: "offline_fixture",
+      noConsentAccepted: true,
+      failedAndLostResponseRetryStable: true,
+      honeypotForwarded: true,
+      eligibleConversions: conversionCount(),
+      neutralDuplicateExcluded: true,
+      lateSuccessAfterWithdrawalExcluded: true,
+      grantedFailureExcluded: true,
+      acceptedWithBlockedAnalytics: true,
+      comparisonCtaJourneyOrdered: true,
     });
   } catch (error) {
     failurePhase = currentPhase;

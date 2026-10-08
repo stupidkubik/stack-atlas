@@ -58,6 +58,7 @@ export function ShortlistForm({ entryPoint }: { readonly entryPoint: ShortlistEn
       requestId: requestId.current,
       email: email.trim().toLowerCase(),
       scenario,
+      website: String(new FormData(form).get("website") ?? ""),
     });
 
     if (response.kind === "retryable_error") {
@@ -147,7 +148,7 @@ export function ShortlistForm({ entryPoint }: { readonly entryPoint: ShortlistEn
                 type="checkbox"
                 required
                 checked={permission}
-                onChange={(event) => { setPermission(event.target.checked); clearRetryIdentity(); }}
+                onChange={(event) => { setPermission(event.target.checked); if (state !== "submitting") setState("idle"); }}
                 aria-invalid={state === "validation_error" && !permission ? true : undefined}
                 className="mt-1 size-5 shrink-0 rounded border-slate-400 text-sky-800 focus:ring-2 focus:ring-sky-700/30"
               />

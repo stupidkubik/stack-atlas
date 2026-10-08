@@ -8,6 +8,7 @@ export interface LeadFormPayload {
   readonly requestId: string;
   readonly email: string;
   readonly scenario: LeadScenario;
+  readonly website?: string;
 }
 
 /** Sends the transient form values directly to the same-origin server endpoint. */
@@ -21,7 +22,7 @@ export async function submitLeadForm(payload: LeadFormPayload): Promise<LeadSubm
       body: JSON.stringify({
         ...payload,
         contactPermission: true,
-        website: "",
+        website: payload.website ?? "",
       }),
     });
     const body: unknown = await response.json();
